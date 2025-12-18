@@ -1,20 +1,496 @@
-import 'package:flutter/material.dart';
+// ignore_for_file: unrelated_type_equality_checks, avoid_print
 
-void main() {
-  runApp(const MainApp());
+import 'dart:io';
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:v2rp3/FE/mainScreen/login_screen4.dart';
+import 'package:v2rp3/FE/navbar/navbar.dart';
+import 'package:v2rp3/FE/navbar/navbar.dart' as navbar_module;
+import 'additional/splash.dart';
+
+// Background message handler (must be top-level function)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print('Handling a background message: ${message.messageId}');
 }
 
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+// Local notifications plugin
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+// Global variable to store FCM token
+String? fcmToken;
+
+// Helper to print long strings in chunks to avoid truncation
+void _printLongString(String label, String? value) {
+  if (value == null) {
+    print('$label: null');
+    return;
+  }
+
+  const int chunkSize = 800; // Print in chunks to avoid truncation
+  if (value.length <= chunkSize) {
+    print('$label: $value');
+  } else {
+    print('$label (length: ${value.length}):');
+    for (int i = 0; i < value.length; i += chunkSize) {
+      int end = (i + chunkSize < value.length) ? i + chunkSize : value.length;
+      print('  [${i}-${end}]: ${value.substring(i, end)}');
+    }
+  }
+}
+
+// Debug helper to inspect stored credentials/tokens
+Future<void> _debugPrintAuthState({String context = 'unknown'}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final seckey = prefs.getString('seckey');
+    final kulonuwun = prefs.getString('kulonuwun');
+    final monggo = prefs.getString('monggo');
+    final storedFcm = prefs.getString('fcm_token');
+
+    print('[debug:$context] === AUTH STATE DEBUG ===');
+    _printLongString('[debug:$context] seckey', seckey);
+    _printLongString('[debug:$context] kulonuwun', kulonuwun);
+    _printLongString('[debug:$context] monggo', monggo);
+    _printLongString('[debug:$context] fcm_token(prefs)', storedFcm);
+    _printLongString('[debug:$context] fcmToken(var)', fcmToken);
+    print('[debug:$context] === END AUTH STATE ===');
+  } catch (e) {
+    print('[debug:$context] Failed to read auth state: $e');
+  }
+}
+
+// Global navigator key for navigation
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// Function to handle notification navigation
+void _handleNotificationNavigation(String payload) {
+  try {
+    final data = jsonDecode(payload);
+    final String? route = data['route'] as String?;
+    final String? screen = data['screen'] as String?;
+    final String? type = data['type'] as String?;
+    final String? company = data['company'] as String?;
+    final String? role = data['role'] as String?;
+    final String? reffno = data['reffno'] as String?;
+    final String? seckeyPayload = data['seckey'] as String?;
+    final Map<String, dynamic>? extraData =
+        data['data'] as Map<String, dynamic>?;
+
+    print(
+        'Navigating from notification - route: $route, screen: $screen, type: $type, company: $company, role: $role, reffno: $reffno, seckey: $seckeyPayload');
+
+    // Check if user is logged in
+    SharedPreferences.getInstance().then((prefs) {
+      final String? kulonuwun = prefs.getString('kulonuwun');
+      final String? monggo = prefs.getString('monggo');
+
+      if (kulonuwun == null || monggo == null) {
+        print('User not logged in, cannot navigate');
+        _debugPrintAuthState(context: 'notification_no_login');
+        return;
+      }
+
+      // Navigate based on route/screen/type
+      if (route != null || screen != null || type != null) {
+        _navigateToScreen(
+            route: route, screen: screen, type: type, data: extraData);
+      }
+    });
+  } catch (e) {
+    print('Error parsing notification payload: $e');
+  }
+}
+
+// Normalize payload so every listener produces the same structure
+Map<String, dynamic> _normalizeFcmPayload(Map<String, dynamic> rawData) {
+  return {
+    // navigation hints
+    'route': rawData['route'] ?? rawData['screen'],
+    'screen': rawData['screen'],
+    'type': rawData['type'] ?? rawData['menu'] ?? rawData['route'],
+    // business identifiers
+    'company': rawData['company'],
+    'role': rawData['role'],
+    'reffno': rawData['reffno'] ?? rawData['refno'],
+    'seckey': rawData['seckey'],
+    // keep original data for downstream usage
+    'data': rawData,
+  };
+}
+
+// Function to navigate to specific screen
+void _navigateToScreen({
+  String? route,
+  String? screen,
+  String? type,
+  Map<String, dynamic>? data,
+}) {
+  // Wait for app to be ready
+  Future.delayed(const Duration(milliseconds: 500), () {
+    if (navigatorKey.currentContext == null) {
+      print('Navigator context not ready yet');
+      return;
+    }
+
+    // Navigate to Navbar first if not already there
+    try {
+      Get.offAll(const Navbar());
+    } catch (e) {
+      print('Error navigating to Navbar: $e');
+      return;
+    }
+
+    // Then navigate to specific screen based on route/screen/type
+    Future.delayed(const Duration(milliseconds: 500), () {
+      int? targetTabIndex;
+
+      // Handle route-based navigation (main tabs)
+      if (route != null) {
+        switch (route.toLowerCase()) {
+          case 'home':
+          case 'home_screen':
+            targetTabIndex = 0; // Home screen (index 0)
+            break;
+          case 'approval':
+          case 'approval_screen':
+            targetTabIndex = 1; // Approval screen (index 1)
+            break;
+          case 'setting':
+          case 'setting_screen':
+            targetTabIndex = 2; // Setting screen (index 2)
+            break;
+          default:
+            print('Unknown route: $route');
+        }
+      }
+
+      // Handle type-based navigation (fallback)
+      if (targetTabIndex == null && type != null) {
+        switch (type.toLowerCase()) {
+          case 'home':
+            targetTabIndex = 0;
+            break;
+          case 'approval':
+          case 'approve':
+            targetTabIndex = 1;
+            break;
+          case 'setting':
+          case 'settings':
+          case 'profile':
+            targetTabIndex = 2;
+            break;
+          default:
+            print('Unknown type: $type');
+        }
+      }
+
+      // Navigate to the target tab if found
+      if (targetTabIndex != null) {
+        // Try to access Navbar state and navigate
+        try {
+          // Wait a bit more for navbar to be fully built
+          Future.delayed(const Duration(milliseconds: 200), () {
+            // Use global reference from navbar.dart
+            if (navbar_module.currentNavbarState != null) {
+              navbar_module.currentNavbarState!.navigateToTab(targetTabIndex!);
+              print('Navigated to tab index: $targetTabIndex');
+            } else {
+              // If navbar not ready, navigate first then set tab
+              Get.offAll(() => const Navbar());
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (navbar_module.currentNavbarState != null) {
+                  navbar_module.currentNavbarState!
+                      .navigateToTab(targetTabIndex!);
+                  print('Navigated to tab index: $targetTabIndex (delayed)');
+                }
+              });
+            }
+          });
+        } catch (e) {
+          print('Error navigating to tab: $e');
+        }
+      }
+
+      // Handle specific screens within approval (if needed)
+      if (screen != null) {
+        print('Navigate to screen: $screen with data: $data');
+        // This would need custom navigation logic based on screen name
+        // For example, navigate to specific approval detail screen
+      }
+    });
+  });
+}
+
+// Function to save FCM token to SharedPreferences
+Future<void> saveFcmTokenToLocal(String? token) async {
+  if (token != null) {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('fcm_token', token);
+    print('FCM Token saved to local storage');
+  }
+}
+
+// Function to get and save FCM token
+Future<String?> getAndSaveFcmToken() async {
+  try {
+    final FirebaseMessaging messaging = FirebaseMessaging.instance;
+    String? token = await messaging.getToken();
+
+    if (token != null) {
+      fcmToken = token;
+      await saveFcmTokenToLocal(token);
+      print('FCM Token generated: $token');
+    }
+
+    return token;
+  } catch (e) {
+    print('Error getting FCM token: $e');
+    return null;
+  }
+}
+
+// Initialize local notifications
+Future<void> initializeNotifications() async {
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const DarwinInitializationSettings initializationSettingsIOS =
+      DarwinInitializationSettings(
+    requestAlertPermission: true,
+    requestBadgePermission: true,
+    requestSoundPermission: true,
+  );
+
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+    iOS: initializationSettingsIOS,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(
+    initializationSettings,
+    onDidReceiveNotificationResponse: (NotificationResponse response) {
+      // Handle notification tap
+      if (response.payload != null) {
+        _handleNotificationNavigation(response.payload!);
+      }
+    },
+  );
+
+  // Android notification channel
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'high_importance_channel',
+    'High Importance Notifications',
+    description: 'This channel is used for important notifications.',
+    importance: Importance.high,
+  );
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+}
+
+// Initialize Firebase and FCM in background (non-blocking)
+Future<void> _initializeFirebaseAndFCM() async {
+  try {
+    // Initialize Firebase with timeout
+    await Firebase.initializeApp().timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        print('Firebase initialization timeout');
+        throw TimeoutException('Firebase initialization timeout');
+      },
+    );
+    print('Firebase initialized successfully');
+
+    // Set up background message handler
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // Initialize local notifications with timeout
+    await initializeNotifications().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        print('Local notifications initialization timeout');
+      },
+    );
+    print('Local notifications initialized successfully');
+
+    // Request notification permissions (no timeout for user interaction)
+    final FirebaseMessaging messaging = FirebaseMessaging.instance;
+    NotificationSettings settings;
+    try {
+      settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+    } catch (e) {
+      print('Error requesting notification permission: $e');
+      return;
+    }
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      print('User granted notification permission');
+
+      // Get and save FCM token with timeout
+      try {
+        await getAndSaveFcmToken().timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            print('FCM token generation timeout');
+            return null;
+          },
+        );
+      } catch (e) {
+        print('Error getting FCM token: $e');
+      }
+      await _debugPrintAuthState(context: 'startup_after_token');
+
+      // Listen for token refresh
+      messaging.onTokenRefresh.listen((String newToken) {
+        print('FCM Token refreshed: $newToken');
+        fcmToken = newToken;
+        saveFcmTokenToLocal(newToken);
+        _debugPrintAuthState(context: 'token_refresh');
+        // Token will be sent when user chooses role again
+      });
+
+      // Handle foreground messages
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        print('Got a message whilst in the foreground!');
+        print('Message data: ${message.data}');
+
+        if (message.notification != null) {
+          print(
+              'Message also contained a notification: ${message.notification}');
+
+          // Prepare payload for navigation
+          final normalized = _normalizeFcmPayload(message.data);
+          String payload = jsonEncode(normalized);
+
+          // Show local notification when app is in foreground with the same
+          // primary color used by the approval screen (#F4A62A) so the
+          // notification visuals stay on-brand.
+          flutterLocalNotificationsPlugin.show(
+            message.hashCode,
+            message.notification?.title,
+            message.notification?.body,
+            NotificationDetails(
+              android: AndroidNotificationDetails(
+                'high_importance_channel',
+                'High Importance Notifications',
+                channelDescription:
+                    'This channel is used for important notifications.',
+                importance: Importance.high,
+                priority: Priority.high,
+                color: const Color(0xFFF4A62A),
+                colorized: true,
+                styleInformation: BigTextStyleInformation(
+                  message.notification?.body ?? '',
+                  contentTitle: message.notification?.title,
+                ),
+              ),
+              iOS: const DarwinNotificationDetails(
+                presentAlert: true,
+                presentBadge: true,
+                presentSound: true,
+              ),
+            ),
+            payload: payload,
+          );
+        }
+      });
+
+      // Handle notification taps when app is in background/terminated
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        print('A new onMessageOpenedApp event was published!');
+        print('Message data: ${message.data}');
+
+        // Handle navigation from background notification
+        if (message.data.isNotEmpty) {
+          final normalized = _normalizeFcmPayload(message.data);
+          String payload = jsonEncode(normalized);
+          _handleNotificationNavigation(payload);
+        }
+      });
+
+      // Check if app was opened from a terminated state via notification (with timeout)
+      RemoteMessage? initialMessage =
+          await messaging.getInitialMessage().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          print('getInitialMessage timeout');
+          return null;
+        },
+      );
+      if (initialMessage != null) {
+        print('App opened from terminated state via notification');
+        print('Message data: ${initialMessage.data}');
+
+        // Handle navigation from terminated state notification
+        if (initialMessage.data.isNotEmpty) {
+          final normalized = _normalizeFcmPayload(initialMessage.data);
+          String payload = jsonEncode(normalized);
+          _handleNotificationNavigation(payload);
+        }
+      }
+    } else {
+      print('User declined or has not accepted notification permissions');
+    }
+  } catch (e, stackTrace) {
+    print('Error initializing Firebase/FCM: $e');
+    print('Stack trace: $stackTrace');
+    // Continue even if Firebase fails to initialize
+  }
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Run app immediately, initialize Firebase/FCM in background
+  runApp(MyApp());
+
+  // Initialize Firebase and FCM in background (non-blocking)
+  _initializeFirebaseAndFCM();
+}
+
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback =
+          (X509Certificate cert, String host, int port) => true;
+  }
+}
+
+// ignore: must_be_immutable
+class MyApp extends StatelessWidget {
+  String? finalUsername;
+
+  MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Hello World!'),
-        ),
-      ),
+    return GetMaterialApp(
+      navigatorKey: navigatorKey,
+      title: 'V2RP',
+      initialRoute: '/',
+      routes: {
+        '/Login': (context) => const LoginPage4(),
+        // '/Second': (context) => const SecondScreen()
+      },
+      debugShowCheckedModeBanner: false,
+      home: const SplashScreen(),
     );
   }
 }

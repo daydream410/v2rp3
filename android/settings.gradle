@@ -13,6 +13,14 @@ pluginManagement {
     plugins {
         id "dev.flutter.flutter-gradle-plugin" version "1.0.0" apply false
     }
+    
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.namespace == 'org.jetbrains.kotlin' || requested.id.id == 'org.jetbrains.kotlin.jvm' || requested.id.id.contains('kotlin')) {
+                useVersion('1.7.10')
+            }
+        }
+    }
 }
 
 include ":app"
