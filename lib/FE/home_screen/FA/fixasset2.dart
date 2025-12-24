@@ -199,7 +199,7 @@ class _FixAsset2State extends State<FixAsset2> {
                               height: MediaQuery.of(context).size.height * 0.07,
                             );
                           },
-                          physics: const BouncingScrollPhysics(),
+                          physics: const ClampingScrollPhysics(),
                           itemCount: _dataaa.length,
                           itemBuilder: (context, index) {
                             return Card(
@@ -588,7 +588,7 @@ class _FixAsset2State extends State<FixAsset2> {
                                               0.07,
                                     );
                                   },
-                                  physics: const BouncingScrollPhysics(),
+                                  physics: const ClampingScrollPhysics(),
                                   itemCount: _dataaa.length,
                                   itemBuilder: (context, index) {
                                     return Card(

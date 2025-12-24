@@ -239,7 +239,7 @@
 //                     //                 MediaQuery.of(context).size.height * 0.02,
 //                     //           );
 //                     //         },
-//                     //         physics: const BouncingScrollPhysics(),
+//                     //         physics: const ClampingScrollPhysics(),
 //                     //         itemCount: _dataaa.length,
 //                     //         itemBuilder: (context, index) {
 //                     //           return Card(
@@ -332,7 +332,7 @@
 //     showMaterialModalBottomSheet(
 //       context: context,
 //       builder: (context) => PhotoViewGallery.builder(
-//         scrollPhysics: const BouncingScrollPhysics(),
+//         scrollPhysics: const ClampingScrollPhysics(),
 //         builder: (BuildContext context, int index) {
 //           return PhotoViewGalleryPageOptions(
 //               imageProvider: NetworkImage('https://v2rp.net/' +

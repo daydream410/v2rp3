@@ -3,7 +3,7 @@ abstract class ApiName {
   //cash bank
   static const kasbonConfirm = '/api/v1/mobile/confirmation/kasbon/';
   static const kasbonApp = '/api/v1/mobile/approval/kasbon/';
-  static const lpjkConfirm = '/api/v1/mobile/confirmation/lpjk';
+  static const lpjkConfirm = '/api/v1/mobile/confirmation/lpjk/';
   static const lpjkApp = '/api/v1/mobile/approval/lpjk/';
   static const assembling = '/api/v1/mobile/approval/assembling/';
   static const grApp = '/api/v1/mobile/approval/goodreceive/';

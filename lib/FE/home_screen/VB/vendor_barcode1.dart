@@ -218,7 +218,7 @@ class _VendorBarcode1State extends State<VendorBarcode1> {
                                     MediaQuery.of(context).size.height * 0.01,
                               );
                             },
-                            physics: const BouncingScrollPhysics(),
+                            physics: const ClampingScrollPhysics(),
                             itemCount: _dataaa.length,
                             itemBuilder: (context, index) {
                               return Card(
@@ -351,7 +351,7 @@ class _VendorBarcode1State extends State<VendorBarcode1> {
                                               0.01,
                                     );
                                   },
-                                  physics: const BouncingScrollPhysics(),
+                                  physics: const ClampingScrollPhysics(),
                                   itemCount: _dataaa.length,
                                   itemBuilder: (context, index) {
                                     return Card(

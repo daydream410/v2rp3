@@ -63,7 +63,7 @@ class _SettingScreenState extends State<SettingScreen> {
 
       var request = http.Request(
         'GET',
-        Uri.parse('https://v2rp.net/dev/api/v2/mobile/profile'),
+        Uri.parse('https://v2rp.net/api/v2/mobile/profile'),
       );
 
       request.headers.addAll(headers);
@@ -543,7 +543,7 @@ class _SettingScreenState extends State<SettingScreen> {
                             ),
                             const Spacer(),
                             Text(
-                              '1.2.7',
+                              '1.2.8',
                               style: TextStyle(
                                 fontSize: isTablet ? 18.0 : 16.0,
                                 color: Colors.grey[600],
@@ -656,7 +656,7 @@ class _SettingScreenState extends State<SettingScreen> {
 
       var request = http.Request(
         'GET',
-        Uri.parse('https://v2rp.net/dev/api/v2/mobile/change/role'),
+        Uri.parse('https://v2rp.net/api/v2/mobile/change/role'),
       );
 
       request.headers.addAll(headers);
@@ -1032,7 +1032,7 @@ class _SettingScreenState extends State<SettingScreen> {
 
       var request = http.Request(
         'POST',
-        Uri.parse('https://v2rp.net/dev/api/v2/mobile/choose/role/$seckey'),
+        Uri.parse('https://v2rp.net/api/v2/mobile/choose/role/$seckey'),
       );
 
       request.body = jsonEncode({

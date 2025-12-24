@@ -172,7 +172,7 @@ class _StockAdjAppState extends State<StockAdjApp> {
                                                 0.01,
                                       );
                                     },
-                                    physics: const BouncingScrollPhysics(),
+                                    physics: const ClampingScrollPhysics(),
                                     itemCount: _foundUsers.length,
                                     itemBuilder: (context, index) {
                                       return Card(
@@ -359,7 +359,7 @@ class _StockAdjAppState extends State<StockAdjApp> {
                                             );
                                           },
                                           physics:
-                                              const BouncingScrollPhysics(),
+                                              const ClampingScrollPhysics(),
                                           itemCount: _foundUsers.length,
                                           itemBuilder: (context, index) {
                                             return Card(

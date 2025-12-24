@@ -173,7 +173,7 @@ class _MrAppState extends State<MrApp> {
                                                 0.01,
                                       );
                                     },
-                                    physics: const BouncingScrollPhysics(),
+                                    physics: const ClampingScrollPhysics(),
                                     itemCount: _foundUsers.length,
                                     itemBuilder: (context, index) {
                                       return Card(
@@ -365,7 +365,7 @@ class _MrAppState extends State<MrApp> {
                                             );
                                           },
                                           physics:
-                                              const BouncingScrollPhysics(),
+                                              const ClampingScrollPhysics(),
                                           itemCount: _foundUsers.length,
                                           itemBuilder: (context, index) {
                                             return Card(

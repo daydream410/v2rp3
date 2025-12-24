@@ -175,7 +175,7 @@ class _CaSetApprovalState extends State<CaSetApproval> {
                                                 0.01,
                                       );
                                     },
-                                    physics: const BouncingScrollPhysics(),
+                                    physics: const ClampingScrollPhysics(),
                                     // itemCount: _dataaa.length,
                                     itemCount: _foundUsers.length,
                                     itemBuilder: (context, index) {
@@ -366,7 +366,7 @@ class _CaSetApprovalState extends State<CaSetApproval> {
                                             );
                                           },
                                           physics:
-                                              const BouncingScrollPhysics(),
+                                              const ClampingScrollPhysics(),
                                           // itemCount: _dataaa.length,
                                           itemCount: _foundUsers.length,
                                           itemBuilder: (context, index) {

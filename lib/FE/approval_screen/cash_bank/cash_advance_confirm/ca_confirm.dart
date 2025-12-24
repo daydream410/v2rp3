@@ -176,7 +176,7 @@ class _CashAdvanceConfirmState extends State<CashAdvanceConfirm> {
                                                 0.01,
                                       );
                                     },
-                                    physics: const BouncingScrollPhysics(),
+                                    physics: const ClampingScrollPhysics(),
                                     itemCount: _foundUsers.length,
                                     itemBuilder: (context, index) {
                                       return Card(
@@ -379,7 +379,7 @@ class _CashAdvanceConfirmState extends State<CashAdvanceConfirm> {
                                             );
                                           },
                                           physics:
-                                              const BouncingScrollPhysics(),
+                                              const ClampingScrollPhysics(),
                                           itemCount: _foundUsers.length,
                                           // itemCount: 5,
                                           itemBuilder: (context, index) {

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -59,6 +58,7 @@ class ApprovalScreen extends StatefulWidget {
 class _ApprovalScreenState extends State<ApprovalScreen> {
   Timer? _timeoutTimer;
   bool _isFetching = false;
+  bool _isLoading = false;
   bool selected = false;
   String idSelected = "0";
   bool isVisible1 = true;
@@ -162,11 +162,19 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
       child: Scaffold(
         extendBody: true,
         resizeToAvoidBottomInset: false,
+        backgroundColor: HexColor("#F5F5F7"),
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          title: const Text("Approval Menu"),
-          elevation: 0,
+          centerTitle: true,
+          elevation: 2,
           backgroundColor: HexColor("#F4A62A"),
+          title: const Text(
+            "Approval Menu",
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
         ),
         body: LiquidPullToRefresh(
           onRefresh: getDataa2,
@@ -175,6 +183,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
           showChildOpacityTransition: false,
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
+            physics: const BouncingScrollPhysics(),
             child: SafeArea(
               child: Stack(
                 children: [
@@ -190,108 +199,195 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
                   Positioned(
                     child: Column(
                       children: [
-                        //tampil filter chip
-                        Wrap(
-                          spacing: 8,
-                          direction: Axis.horizontal,
-                          children: [
-                            FilterChip(
-                              label: const Text('All'),
-                              backgroundColor: Colors.white,
-                              // checkmarkColor: HexColor("#F4A62A"),
-                              selected: (idSelected == "0") ? true : false,
-                              onSelected: (bool value) {
-                                setState(() {
-                                  idSelected = "0";
-                                  isVisible1 = true;
-                                  isVisible2 = true;
-                                  isVisible3 = true;
-                                  isVisible4 = true;
-                                  isVisible5 = true;
-                                });
-                              },
-                            ),
-                            FilterChip(
-                              label: const Text('Cash & Bank Approval'),
-                              backgroundColor: Colors.white,
-                              // checkmarkColor: HexColor("#F4A62A"),
-                              selected: (idSelected == "1") ? true : false,
-                              onSelected: (bool value) {
-                                setState(() {
-                                  idSelected = "1";
-                                  isVisible1 = true;
-                                  isVisible2 = false;
-                                  isVisible3 = false;
-                                  isVisible4 = false;
-                                  isVisible5 = false;
-                                });
-                              },
-                            ),
-                            FilterChip(
-                              label: const Text('Sales Approval'),
-                              backgroundColor: Colors.white,
-                              // checkmarkColor: HexColor("#F4A62A"),
-                              selected: (idSelected == "2") ? true : false,
-                              onSelected: (bool value) {
-                                setState(() {
-                                  idSelected = "2";
-                                  isVisible1 = false;
-                                  isVisible2 = true;
-                                  isVisible3 = false;
-                                  isVisible4 = false;
-                                  isVisible5 = false;
-                                });
-                              },
-                            ),
-                            FilterChip(
-                              label: const Text('Purchase Approval'),
-                              backgroundColor: Colors.white,
-                              // checkmarkColor: HexColor("#F4A62A"),
-                              selected: (idSelected == "3") ? true : false,
-                              onSelected: (bool value) {
-                                setState(() {
-                                  idSelected = "3";
-                                  isVisible1 = false;
-                                  isVisible2 = false;
-                                  isVisible3 = true;
-                                  isVisible4 = false;
-                                  isVisible5 = false;
-                                });
-                              },
-                            ),
-                            FilterChip(
-                              label: const Text('Inventory Approval'),
-                              backgroundColor: Colors.white,
-                              // checkmarkColor: HexColor("#F4A62A"),
-                              selected: (idSelected == "4") ? true : false,
-                              onSelected: (bool value) {
-                                setState(() {
-                                  idSelected = "4";
-                                  isVisible1 = false;
-                                  isVisible2 = false;
-                                  isVisible3 = false;
-                                  isVisible4 = true;
-                                  isVisible5 = false;
-                                });
-                              },
-                            ),
-                            FilterChip(
-                              label: const Text('PPC Approval'),
-                              backgroundColor: Colors.white,
-                              // checkmarkColor: HexColor("#F4A62A"),
-                              selected: (idSelected == "5") ? true : false,
-                              onSelected: (bool value) {
-                                setState(() {
-                                  idSelected = "5";
-                                  isVisible1 = false;
-                                  isVisible2 = false;
-                                  isVisible3 = false;
-                                  isVisible4 = false;
-                                  isVisible5 = true;
-                                });
-                              },
-                            ),
-                          ],
+                        const SizedBox(height: 12),
+                        // bar kategori dalam scroll horizontal
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          child: Row(
+                            children: [
+                              FilterChip(
+                                label: const Text('All'),
+                                backgroundColor: Colors.white,
+                                shape: const StadiumBorder(),
+                                selectedColor: HexColor("#F4A62A"),
+                                side: BorderSide(
+                                  color: idSelected == "0"
+                                      ? HexColor("#F4A62A")
+                                      : Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                                labelStyle: TextStyle(
+                                  color: idSelected == "0"
+                                      ? Colors.white
+                                      : Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                selected: idSelected == "0",
+                                onSelected: (bool value) {
+                                  setState(() {
+                                    idSelected = "0";
+                                    isVisible1 = true;
+                                    isVisible2 = true;
+                                    isVisible3 = true;
+                                    isVisible4 = true;
+                                    isVisible5 = true;
+                                  });
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              FilterChip(
+                                label: const Text('Cash & Bank'),
+                                backgroundColor: Colors.white,
+                                shape: const StadiumBorder(),
+                                selectedColor: HexColor("#F4A62A"),
+                                side: BorderSide(
+                                  color: idSelected == "1"
+                                      ? HexColor("#F4A62A")
+                                      : Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                                labelStyle: TextStyle(
+                                  color: idSelected == "1"
+                                      ? Colors.white
+                                      : Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                selected: idSelected == "1",
+                                onSelected: (bool value) {
+                                  setState(() {
+                                    idSelected = "1";
+                                    isVisible1 = true;
+                                    isVisible2 = false;
+                                    isVisible3 = false;
+                                    isVisible4 = false;
+                                    isVisible5 = false;
+                                  });
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              FilterChip(
+                                label: const Text('Sales'),
+                                backgroundColor: Colors.white,
+                                shape: const StadiumBorder(),
+                                selectedColor: HexColor("#F4A62A"),
+                                side: BorderSide(
+                                  color: idSelected == "2"
+                                      ? HexColor("#F4A62A")
+                                      : Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                                labelStyle: TextStyle(
+                                  color: idSelected == "2"
+                                      ? Colors.white
+                                      : Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                selected: idSelected == "2",
+                                onSelected: (bool value) {
+                                  setState(() {
+                                    idSelected = "2";
+                                    isVisible1 = false;
+                                    isVisible2 = true;
+                                    isVisible3 = false;
+                                    isVisible4 = false;
+                                    isVisible5 = false;
+                                  });
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              FilterChip(
+                                label: const Text('Purchase'),
+                                backgroundColor: Colors.white,
+                                shape: const StadiumBorder(),
+                                selectedColor: HexColor("#F4A62A"),
+                                side: BorderSide(
+                                  color: idSelected == "3"
+                                      ? HexColor("#F4A62A")
+                                      : Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                                labelStyle: TextStyle(
+                                  color: idSelected == "3"
+                                      ? Colors.white
+                                      : Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                selected: idSelected == "3",
+                                onSelected: (bool value) {
+                                  setState(() {
+                                    idSelected = "3";
+                                    isVisible1 = false;
+                                    isVisible2 = false;
+                                    isVisible3 = true;
+                                    isVisible4 = false;
+                                    isVisible5 = false;
+                                  });
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              FilterChip(
+                                label: const Text('Inventory'),
+                                backgroundColor: Colors.white,
+                                shape: const StadiumBorder(),
+                                selectedColor: HexColor("#F4A62A"),
+                                side: BorderSide(
+                                  color: idSelected == "4"
+                                      ? HexColor("#F4A62A")
+                                      : Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                                labelStyle: TextStyle(
+                                  color: idSelected == "4"
+                                      ? Colors.white
+                                      : Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                selected: idSelected == "4",
+                                onSelected: (bool value) {
+                                  setState(() {
+                                    idSelected = "4";
+                                    isVisible1 = false;
+                                    isVisible2 = false;
+                                    isVisible3 = false;
+                                    isVisible4 = true;
+                                    isVisible5 = false;
+                                  });
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              FilterChip(
+                                label: const Text('PPC'),
+                                backgroundColor: Colors.white,
+                                shape: const StadiumBorder(),
+                                selectedColor: HexColor("#F4A62A"),
+                                side: BorderSide(
+                                  color: idSelected == "5"
+                                      ? HexColor("#F4A62A")
+                                      : Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                                labelStyle: TextStyle(
+                                  color: idSelected == "5"
+                                      ? Colors.white
+                                      : Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                selected: idSelected == "5",
+                                onSelected: (bool value) {
+                                  setState(() {
+                                    idSelected = "5";
+                                    isVisible1 = false;
+                                    isVisible2 = false;
+                                    isVisible3 = false;
+                                    isVisible4 = false;
+                                    isVisible5 = true;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                         //kotak putih pertama (cash & bank approval)
                         Visibility(
@@ -327,11 +423,26 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
                                     Padding(
                                       padding: EdgeInsets.only(
                                           left: size.width * 0.05),
-                                      child: const Text(
-                                        'Cash & Bank Approval',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 20.0),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: const [
+                                          Text(
+                                            'Cash & Bank Approval',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 20.0,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            'Manage cash advance and settlement tasks',
+                                            style: TextStyle(
+                                              fontSize: 12.0,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -735,11 +846,26 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
                                     Padding(
                                       padding: EdgeInsets.only(
                                           left: size.width * 0.05),
-                                      child: const Text(
-                                        'Sales Approval',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 20.0),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: const [
+                                          Text(
+                                            'Sales Approval',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 20.0,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            'Approve A/R receipts and sales orders',
+                                            style: TextStyle(
+                                              fontSize: 12.0,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -967,11 +1093,26 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
                                     Padding(
                                       padding: EdgeInsets.only(
                                           left: size.width * 0.05),
-                                      child: const Text(
-                                        'Purchase Approval',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 20.0),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: const [
+                                          Text(
+                                            'Purchase Approval',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 20.0,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            'Handle SPPBJ, PO SCM, A/P and D/N approvals',
+                                            style: TextStyle(
+                                              fontSize: 12.0,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -1890,11 +2031,26 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
                                     Padding(
                                       padding: EdgeInsets.only(
                                           left: size.width * 0.05),
-                                      child: const Text(
-                                        'Inventory Approval',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 20.0),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: const [
+                                          Text(
+                                            'Inventory Approval',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 20.0,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            'Control stock movements, prices and parameters',
+                                            style: TextStyle(
+                                              fontSize: 12.0,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -2921,9 +3077,9 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
                                                 child: InkWell(
                                                   splashColor: Colors.black38,
                                                   onTap: () async {
-                                                    Get.to(totalMMU == 0
+                                                    totalMMU == 0
                                                         ? wakwaw()
-                                                        : () =>
+                                                        : Get.to(() =>
                                                             UpdateMinMaxApp());
                                                   },
                                                 ),
@@ -3094,11 +3250,26 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
                                     Padding(
                                       padding: EdgeInsets.only(
                                           left: size.width * 0.05),
-                                      child: const Text(
-                                        'PPC Approval',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 20.0),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: const [
+                                          Text(
+                                            'PPC Approval',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 20.0,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            'Review and approve production work orders',
+                                            style: TextStyle(
+                                              fontSize: 12.0,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -3297,6 +3468,29 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
                       ],
                     ),
                   ),
+                  // Global loading overlay
+                  if (_isLoading)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withOpacity(0.20),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const CircularProgressIndicator(),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Loading approval data...',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   // Tooltip for swipe down to refresh
                   if (showTooltip)
                     Positioned(
@@ -3427,6 +3621,11 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   Future<void> getDataa() async {
     if (_isFetching) return;
     _isFetching = true;
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(const Duration(minutes: 5), () {
       if (mounted && _isFetching) {
@@ -3448,17 +3647,6 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     var monggo = MsgHeader.monggo;
 
     try {
-      QuickAlert.show(
-        context: context,
-        type: QuickAlertType.info,
-        title: 'Fetching Approval Data...',
-        text: 'Please Wait Until Success Notification is Displayed',
-        barrierDismissible: false,
-        customAsset: 'images/loading.gif',
-        headerBackgroundColor: HexColor("#F4A62A"),
-        confirmBtnColor: HexColor("#F4A62A"),
-        showConfirmBtn: false,
-      );
       // http://156.67.217.113/api/v1/mobile
       var getData = await http.get(
         Uri.https('v2rp.net', '/api/v1/mobile/notif'),
@@ -3468,11 +3656,6 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
           'monggo': finalMonggo ?? monggo,
         },
       );
-
-      // Tutup QuickAlert loading setelah data didapat
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
 
       final responseData = json.decode(getData.body);
       print("getdataaaa " + responseData.toString());
@@ -3601,25 +3784,27 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
       // print("totalPOS = " + totalPOS.toString());
       // print("totalPNS = " + totalPNS.toString());
       // print("supplierGabung = " + supplierGabung.toString());
-      await QuickAlert.show(
-        context: context,
-        type: QuickAlertType.success,
-        text: 'Fetching Approval Data',
-        barrierDismissible: false,
-        autoCloseDuration: const Duration(milliseconds: 900),
-        showConfirmBtn: false,
-      );
     } catch (e) {
       print(e);
     } finally {
       _timeoutTimer?.cancel();
       _isFetching = false;
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> getDataa2() async {
     if (_isFetching) return;
     _isFetching = true;
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(const Duration(minutes: 5), () {
       if (mounted && _isFetching) {
@@ -3797,6 +3982,11 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     } finally {
       _timeoutTimer?.cancel();
       _isFetching = false;
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

@@ -824,7 +824,8 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
         type: QuickAlertType.warning,
         disableBackBtn: true,
         title: 'Timeout! ' + widget.nokasbon,
-        text: 'Connection timeout. Please check your internet connection and try again.',
+        text:
+            'Connection timeout. Please check your internet connection and try again.',
         onConfirmBtnTap: () async {
           Get.to(() => CashAdvanceApproval());
         },
@@ -837,7 +838,8 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
         type: QuickAlertType.warning,
         disableBackBtn: true,
         title: 'Network Error! ' + widget.nokasbon,
-        text: 'No internet connection. Please check your network and try again.',
+        text:
+            'No internet connection. Please check your network and try again.',
         onConfirmBtnTap: () async {
           Get.to(() => CashAdvanceApproval());
         },

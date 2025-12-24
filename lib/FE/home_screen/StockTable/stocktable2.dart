@@ -366,7 +366,7 @@ class _StockTable2State extends State<StockTable2> {
                                               0.02,
                                     );
                                   },
-                                  physics: const BouncingScrollPhysics(),
+                                  physics: const ClampingScrollPhysics(),
                                   itemCount: dataaa.length,
                                   itemBuilder: (context, index) {
                                     return Card(

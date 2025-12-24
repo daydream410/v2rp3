@@ -12,13 +12,47 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/FE/mainScreen/login_screen4.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart' as navbar_module;
+import 'package:v2rp3/FE/approval_screen/cash_bank/cash_advance_confirm/ca_confirm.dart';
+import 'package:v2rp3/FE/approval_screen/cash_bank/cash_advance_approval/ca_app.dart';
+import 'package:v2rp3/FE/approval_screen/cash_bank/ca_set_confirm/ca_set_confirm.dart';
+import 'package:v2rp3/FE/approval_screen/cash_bank/ca_set_approval/ca_set_app.dart';
+import 'package:v2rp3/FE/approval_screen/sales_approval/ar_app/ar_app.dart';
+import 'package:v2rp3/FE/approval_screen/sales_approval/sales_order_app/sales_order_app.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/sppbj_confirm/sppbj_confirm.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/sppbj_approval/sppbj_app.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/po_scm_approval/poscm_app.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/np_app/newap_app.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/dpreq_approval/dpreq_app.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/ap_refund/ap_refund.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/ap_adjustment/apadj_app.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/dn_approval/dn_app.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/po_ex_approval/poex_app.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/poscm_unapproved/poscm_unapproved.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/mu_approval/mu_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/gr_approval/gr_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/it_approval/it_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/sm_approval/sm_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/stockadj_approval/stockadj_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/stock_trf_approval/stocktrf_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/mr_approval/mr_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/stock_topup_approval/topup_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/stockprice_approval/stockprice_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/update_minmax_approval/minmax_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/itstock_adj_approval/itstock_app.dart';
+import 'package:v2rp3/FE/approval_screen/inventory_approval/assembling_approval/asmb_app.dart';
+import 'package:v2rp3/FE/approval_screen/ppc_approval/wo_app/wo_app.dart';
+import 'package:v2rp3/FE/approval_screen/ppc_approval/wo_completed/we_completed.dart';
 import 'additional/splash.dart';
 
 // Background message handler (must be top-level function)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print('Handling a background message: ${message.messageId}');
+  print(
+      '🔔 [FCM:BACKGROUND] Handling a background message: ${message.messageId}');
+  print('🔔 [FCM:BACKGROUND] Data: ${message.data}');
+  print(
+      '🔔 [FCM:BACKGROUND] Notification: ${message.notification?.title} | ${message.notification?.body}');
 }
 
 // Local notifications plugin
@@ -226,7 +260,134 @@ void _navigateToScreen({
         // This would need custom navigation logic based on screen name
         // For example, navigate to specific approval detail screen
       }
+
+      // Additionally, handle direct approval detail navigation based on type code
+      if (type != null) {
+        _openApprovalDetailByType(type, data);
+      }
     });
+  });
+}
+
+// Navigate directly to specific approval detail screen based on type code
+void _openApprovalDetailByType(String? type, Map<String, dynamic>? data) {
+  if (type == null) return;
+
+  final String t = type.toUpperCase();
+  print('_openApprovalDetailByType called with type: $t, data: $data');
+
+  // Slight delay to ensure main navigation (Navbar/Approval tab) is ready
+  Future.delayed(const Duration(milliseconds: 800), () {
+    try {
+      switch (t) {
+        // Cash & Bank
+        case 'KC': // Cash Advance Confirmation
+          Get.to(() => CashAdvanceConfirm());
+          break;
+        case 'KA': // Cash Advance Approval
+          Get.to(() => CashAdvanceApproval());
+          break;
+        case 'LC': // C/A Settlement Confirmation
+          Get.to(() => const CaSettleConfirm());
+          break;
+        case 'LA': // C/A Settlement Approval
+          Get.to(() => CaSetApproval());
+          break;
+
+        // Sales
+        case 'ARRA': // A/R Receipt Approval
+          Get.to(() => ArApproval());
+          break;
+        case 'SOA': // Sales Order Approval
+          Get.to(() => SalesOrderApproval());
+          break;
+
+        // Purchase
+        case 'SC': // SPPBJ Confirmation
+          Get.to(() => SppbjConfirm());
+          break;
+        case 'SA': // SPPBJ Approval
+          Get.to(() => SppbjApp());
+          break;
+        case 'PA': // PO SCM Approval
+          Get.to(() => PoScmApp());
+          break;
+        case 'NA': // New Payable Approval
+          Get.to(() => NpApp());
+          break;
+        case 'DPA': // D/P Request Approval
+          Get.to(() => DpReqApp());
+          break;
+        case 'APRA': // A/P Refund Approval
+          Get.to(() => ApRefundApp());
+          break;
+        case 'APAA': // A/P Adjustment Approval
+          Get.to(() => ApAdjApp());
+          break;
+        case 'DNA': // D/N to Supplier Approval
+          Get.to(() => DebitNotesApp());
+          break;
+        case 'POE': // PO Exception Approval
+          Get.to(() => PoExApp());
+          break;
+        case 'POS': // PO SCM Supplier Unapproved Approval (grouped)
+        case 'PNS':
+          Get.to(() => PoUnapproved());
+          break;
+
+        // Inventory
+        case 'MUA': // Material Used Approval
+          Get.to(() => MuApp());
+          break;
+        case 'GRA': // Goods Received Approval
+          Get.to(() => GrApp());
+          break;
+        case 'ITA': // Internal Transfer Approval
+          Get.to(() => ItApp());
+          break;
+        case 'SMA': // Stock Movement Approval
+          Get.to(() => SmApp());
+          break;
+        case 'SAA': // Stock Adjustment Approval
+          Get.to(() => StockAdjApp());
+          break;
+        case 'STA': // Stock Transfer Approval
+          Get.to(() => StockTrfApp());
+          break;
+        case 'MRA': // Material Return Approval
+          Get.to(() => MrApp());
+          break;
+        case 'STUA': // Stock Top Up Approval
+          Get.to(() => StockTopupApp());
+          break;
+        case 'SPA': // Stock Price Approval
+          Get.to(() => StockPriceApp());
+          break;
+        case 'MMU': // Update Min/Max Parameter
+          Get.to(() => UpdateMinMaxApp());
+          break;
+        case 'ITSA': // IT/Stock Adjustment Approval (grouped)
+        case 'STSA':
+          Get.to(() => ItStockAdjApp());
+          break;
+        case 'AA': // Assembling Approval
+          Get.to(() => AssemblingApp());
+          break;
+
+        // PPC
+        case 'WOA': // Work Order Approval
+          Get.to(() => WoApp());
+          break;
+        case 'WOU': // Work Order Completed
+          Get.to(() => WoCompleted());
+          break;
+
+        default:
+          print('No direct approval detail mapping for type: $t');
+      }
+    } catch (e) {
+      print('Error navigating to approval detail for type $t: $e');
+    }
   });
 }
 
@@ -242,18 +403,25 @@ Future<void> saveFcmTokenToLocal(String? token) async {
 // Function to get and save FCM token
 Future<String?> getAndSaveFcmToken() async {
   try {
+    print('🔑 [FCM:TOKEN] Requesting FCM token...');
     final FirebaseMessaging messaging = FirebaseMessaging.instance;
     String? token = await messaging.getToken();
 
     if (token != null) {
       fcmToken = token;
       await saveFcmTokenToLocal(token);
-      print('FCM Token generated: $token');
+      print('✅ [FCM:TOKEN] FCM Token generated successfully');
+      print('✅ [FCM:TOKEN] Token length: ${token.length}');
+      print(
+          '✅ [FCM:TOKEN] Token (first 50 chars): ${token.substring(0, token.length > 50 ? 50 : token.length)}...');
+      print('✅ [FCM:TOKEN] Token saved to SharedPreferences');
+    } else {
+      print('❌ [FCM:TOKEN] FCM Token is null!');
     }
 
     return token;
   } catch (e) {
-    print('Error getting FCM token: $e');
+    print('❌ [FCM:TOKEN] Error getting FCM token: $e');
     return null;
   }
 }
@@ -301,30 +469,36 @@ Future<void> initializeNotifications() async {
 
 // Initialize Firebase and FCM in background (non-blocking)
 Future<void> _initializeFirebaseAndFCM() async {
+  print('🚀 [FCM:INIT] Starting Firebase and FCM initialization...');
   try {
     // Initialize Firebase with timeout
+    print('🚀 [FCM:INIT] Step 1: Initializing Firebase...');
     await Firebase.initializeApp().timeout(
       const Duration(seconds: 10),
       onTimeout: () {
-        print('Firebase initialization timeout');
+        print('❌ [FCM:INIT] Firebase initialization timeout');
         throw TimeoutException('Firebase initialization timeout');
       },
     );
-    print('Firebase initialized successfully');
+    print('✅ [FCM:INIT] Firebase initialized successfully');
 
     // Set up background message handler
+    print('🚀 [FCM:INIT] Step 2: Registering background message handler...');
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    print('✅ [FCM:INIT] Background message handler registered');
 
     // Initialize local notifications with timeout
+    print('🚀 [FCM:INIT] Step 3: Initializing local notifications...');
     await initializeNotifications().timeout(
       const Duration(seconds: 5),
       onTimeout: () {
-        print('Local notifications initialization timeout');
+        print('⚠️ [FCM:INIT] Local notifications initialization timeout');
       },
     );
-    print('Local notifications initialized successfully');
+    print('✅ [FCM:INIT] Local notifications initialized successfully');
 
     // Request notification permissions (no timeout for user interaction)
+    print('🚀 [FCM:INIT] Step 4: Requesting notification permissions...');
     final FirebaseMessaging messaging = FirebaseMessaging.instance;
     NotificationSettings settings;
     try {
@@ -334,57 +508,94 @@ Future<void> _initializeFirebaseAndFCM() async {
         sound: true,
         provisional: false,
       );
+      print('📱 [FCM:INIT] Permission status: ${settings.authorizationStatus}');
+      print('📱 [FCM:INIT] Alert: ${settings.alert}');
+      print('📱 [FCM:INIT] Badge: ${settings.badge}');
+      print('📱 [FCM:INIT] Sound: ${settings.sound}');
     } catch (e) {
-      print('Error requesting notification permission: $e');
+      print('❌ [FCM:INIT] Error requesting notification permission: $e');
       return;
     }
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('User granted notification permission');
+      print('✅ [FCM:INIT] User granted notification permission');
 
       // Get and save FCM token with timeout
+      print('🚀 [FCM:INIT] Step 5: Getting FCM token...');
       try {
-        await getAndSaveFcmToken().timeout(
+        final token = await getAndSaveFcmToken().timeout(
           const Duration(seconds: 10),
           onTimeout: () {
-            print('FCM token generation timeout');
+            print('⚠️ [FCM:INIT] FCM token generation timeout');
             return null;
           },
         );
+        if (token != null) {
+          print(
+              '✅ [FCM:INIT] FCM token obtained: ${token.substring(0, 20)}...');
+        } else {
+          print('❌ [FCM:INIT] FCM token is null!');
+        }
       } catch (e) {
-        print('Error getting FCM token: $e');
+        print('❌ [FCM:INIT] Error getting FCM token: $e');
       }
       await _debugPrintAuthState(context: 'startup_after_token');
 
       // Listen for token refresh
+      print('🚀 [FCM:INIT] Step 6: Setting up token refresh listener...');
       messaging.onTokenRefresh.listen((String newToken) {
-        print('FCM Token refreshed: $newToken');
+        print(
+            '🔄 [FCM:TOKEN] FCM Token refreshed: ${newToken.substring(0, 20)}...');
         fcmToken = newToken;
         saveFcmTokenToLocal(newToken);
         _debugPrintAuthState(context: 'token_refresh');
-        // Token will be sent when user chooses role again
       });
+      print('✅ [FCM:INIT] Token refresh listener registered');
 
       // Handle foreground messages
+      print(
+          '🚀 [FCM:INIT] Step 7: Setting up onMessage listener (foreground)...');
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        print('Got a message whilst in the foreground!');
-        print('Message data: ${message.data}');
+        print('🔔 [FCM:onMessage] ==========================================');
+        print('🔔 [FCM:onMessage] Got a message whilst in the foreground!');
+        print('🔔 [FCM:onMessage] Message ID: ${message.messageId}');
+        print('🔔 [FCM:onMessage] From: ${message.from}');
+        print('🔔 [FCM:onMessage] Data: ${message.data}');
+        print(
+            '🔔 [FCM:onMessage] Notification title: ${message.notification?.title}');
+        print(
+            '🔔 [FCM:onMessage] Notification body: ${message.notification?.body}');
+        print(
+            '🔔 [FCM:onMessage] Has notification: ${message.notification != null}');
+        print('🔔 [FCM:onMessage] Has data: ${message.data.isNotEmpty}');
 
-        if (message.notification != null) {
+        // Tampilkan notifikasi juga untuk pesan data-only
+        if (message.notification != null || message.data.isNotEmpty) {
           print(
-              'Message also contained a notification: ${message.notification}');
+              '🔔 [FCM:onMessage] Showing local notification for incoming FCM');
 
           // Prepare payload for navigation
           final normalized = _normalizeFcmPayload(message.data);
           String payload = jsonEncode(normalized);
+          print('🔔 [FCM:onMessage] Normalized payload: $payload');
+
+          final String title =
+              message.notification?.title ?? message.data['title'] ?? 'V2RP';
+          final String body = message.notification?.body ??
+              message.data['body'] ??
+              jsonEncode(message.data);
+
+          print('🔔 [FCM:onMessage] Notification title: $title');
+          print('🔔 [FCM:onMessage] Notification body: $body');
 
           // Show local notification when app is in foreground with the same
           // primary color used by the approval screen (#F4A62A) so the
           // notification visuals stay on-brand.
-          flutterLocalNotificationsPlugin.show(
+          flutterLocalNotificationsPlugin
+              .show(
             message.hashCode,
-            message.notification?.title,
-            message.notification?.body,
+            title,
+            body,
             NotificationDetails(
               android: AndroidNotificationDetails(
                 'high_importance_channel',
@@ -396,8 +607,8 @@ Future<void> _initializeFirebaseAndFCM() async {
                 color: const Color(0xFFF4A62A),
                 colorized: true,
                 styleInformation: BigTextStyleInformation(
-                  message.notification?.body ?? '',
-                  contentTitle: message.notification?.title,
+                  body,
+                  contentTitle: title,
                 ),
               ),
               iOS: const DarwinNotificationDetails(
@@ -407,35 +618,58 @@ Future<void> _initializeFirebaseAndFCM() async {
               ),
             ),
             payload: payload,
-          );
+          )
+              .then((_) {
+            print('✅ [FCM:onMessage] Local notification shown successfully');
+          }).catchError((error) {
+            print('❌ [FCM:onMessage] Error showing local notification: $error');
+          });
+        } else {
+          print('⚠️ [FCM:onMessage] No notification/data payload to display');
         }
+        print('🔔 [FCM:onMessage] ==========================================');
       });
+      print('✅ [FCM:INIT] onMessage listener registered');
 
       // Handle notification taps when app is in background/terminated
+      print('🚀 [FCM:INIT] Step 8: Setting up onMessageOpenedApp listener...');
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        print('A new onMessageOpenedApp event was published!');
-        print('Message data: ${message.data}');
+        print(
+            '🔔 [FCM:onMessageOpenedApp] ==========================================');
+        print('🔔 [FCM:onMessageOpenedApp] Notification tap from background');
+        print('🔔 [FCM:onMessageOpenedApp] Message ID: ${message.messageId}');
+        print('🔔 [FCM:onMessageOpenedApp] Data: ${message.data}');
+        print('🔔 [FCM:onMessageOpenedApp] Notification: '
+            '${message.notification?.title} | ${message.notification?.body}');
 
         // Handle navigation from background notification
         if (message.data.isNotEmpty) {
           final normalized = _normalizeFcmPayload(message.data);
           String payload = jsonEncode(normalized);
+          print(
+              '🔔 [FCM:onMessageOpenedApp] Navigating with payload: $payload');
           _handleNotificationNavigation(payload);
         }
+        print(
+            '🔔 [FCM:onMessageOpenedApp] ==========================================');
       });
+      print('✅ [FCM:INIT] onMessageOpenedApp listener registered');
 
       // Check if app was opened from a terminated state via notification (with timeout)
+      print(
+          '🚀 [FCM:INIT] Step 9: Checking for initial message (terminated state)...');
       RemoteMessage? initialMessage =
           await messaging.getInitialMessage().timeout(
         const Duration(seconds: 5),
         onTimeout: () {
-          print('getInitialMessage timeout');
+          print('⚠️ [FCM:INIT] getInitialMessage timeout');
           return null;
         },
       );
       if (initialMessage != null) {
-        print('App opened from terminated state via notification');
-        print('Message data: ${initialMessage.data}');
+        print(
+            '🔔 [FCM:INIT] App opened from terminated state via notification');
+        print('🔔 [FCM:INIT] Message data: ${initialMessage.data}');
 
         // Handle navigation from terminated state notification
         if (initialMessage.data.isNotEmpty) {
@@ -443,13 +677,35 @@ Future<void> _initializeFirebaseAndFCM() async {
           String payload = jsonEncode(normalized);
           _handleNotificationNavigation(payload);
         }
+      } else {
+        print(
+            'ℹ️ [FCM:INIT] No initial message (app not opened from notification)');
       }
+
+      // Verify listeners are actually subscribed
+      print('🔍 [FCM:INIT] Verifying listeners are active...');
+      print(
+          '🔍 [FCM:INIT] onMessage subscription: ${FirebaseMessaging.onMessage}');
+      print(
+          '🔍 [FCM:INIT] onMessageOpenedApp subscription: ${FirebaseMessaging.onMessageOpenedApp}');
+
+      print('✅ [FCM:INIT] ==========================================');
+      print('✅ [FCM:INIT] FCM initialization COMPLETE!');
+      print(
+          '✅ [FCM:INIT] All listeners are now active and ready to receive messages');
+      print('✅ [FCM:INIT] ==========================================');
     } else {
-      print('User declined or has not accepted notification permissions');
+      print(
+          '❌ [FCM:INIT] User declined or has not accepted notification permissions');
+      print(
+          '❌ [FCM:INIT] Authorization status: ${settings.authorizationStatus}');
+      print('❌ [FCM:INIT] FCM will not work without notification permissions!');
     }
   } catch (e, stackTrace) {
-    print('Error initializing Firebase/FCM: $e');
-    print('Stack trace: $stackTrace');
+    print('❌ [FCM:INIT] ==========================================');
+    print('❌ [FCM:INIT] Error initializing Firebase/FCM: $e');
+    print('❌ [FCM:INIT] Stack trace: $stackTrace');
+    print('❌ [FCM:INIT] ==========================================');
     // Continue even if Firebase fails to initialize
   }
 }

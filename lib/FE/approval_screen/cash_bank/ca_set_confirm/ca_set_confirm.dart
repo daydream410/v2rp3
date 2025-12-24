@@ -176,7 +176,7 @@ class _CaSettleConfirmState extends State<CaSettleConfirm> {
                                                 0.01,
                                       );
                                     },
-                                    physics: const BouncingScrollPhysics(),
+                                    physics: const ClampingScrollPhysics(),
                                     itemCount: _foundUsers.length,
 
                                     itemBuilder: (context, index) {
@@ -380,7 +380,7 @@ class _CaSettleConfirmState extends State<CaSettleConfirm> {
                                             );
                                           },
                                           physics:
-                                              const BouncingScrollPhysics(),
+                                              const ClampingScrollPhysics(),
                                           itemCount: _foundUsers.length,
                                           itemBuilder: (context, index) {
                                             return Card(

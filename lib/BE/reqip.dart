@@ -162,7 +162,7 @@ class MsgHeader {
     try {
       var sendLogin = await http
           .post(
-        Uri.parse('https://v2rp.net/dev/api/v2/mobile/login'),
+        Uri.parse('https://v2rp.net/api/v2/mobile/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "email": emailVal,
@@ -215,7 +215,7 @@ class MsgHeader {
     try {
       var response = await http
           .post(
-        Uri.parse('https://v2rp.net/dev/api/v2/mobile/verify/otp/$seckey'),
+        Uri.parse('https://v2rp.net/api/v2/mobile/verify/otp/$seckey'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "otp": otp,
@@ -289,7 +289,7 @@ class MsgHeader {
     try {
       var sendLogin = await http
           .post(
-        Uri.parse('https://v2rp.net/dev/api/v2/mobile/login'),
+        Uri.parse('https://v2rp.net/api/v2/mobile/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "email": email,
@@ -349,7 +349,7 @@ class MsgHeader {
     try {
       var response = await http
           .post(
-        Uri.parse('https://v2rp.net/dev/api/v2/mobile/choose/role/$seckey'),
+        Uri.parse('https://v2rp.net/api/v2/mobile/choose/role/$seckey'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "fcmtoken": fcmToken,

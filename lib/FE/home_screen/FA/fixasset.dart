@@ -202,7 +202,7 @@
 //                         height: size.height * 0.80,
 //                         child: ListView.separated(
 //                           scrollDirection: Axis.horizontal,
-//                           physics: const BouncingScrollPhysics(),
+//                           physics: const ClampingScrollPhysics(),
 //                           separatorBuilder: (context, index) {
 //                             return SizedBox(
 //                               width: size.width * 0.10,
