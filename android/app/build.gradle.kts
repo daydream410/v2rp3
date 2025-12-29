@@ -40,6 +40,12 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            
+            // Aktifkan minify dan shrink resources untuk mengurangi ukuran APK
+            // Minify akan menghapus kode yang tidak digunakan
+            // Shrink resources akan menghapus resources (gambar, dll) yang tidak digunakan
+            isMinifyEnabled = true
+            isShrinkResources = true
         }
     }
 }
