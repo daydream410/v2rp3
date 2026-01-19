@@ -405,6 +405,39 @@ Future<String?> getAndSaveFcmToken() async {
   try {
     print('🔑 [FCM:TOKEN] Requesting FCM token...');
     final FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+    // For iOS: Wait for APNS token to be available
+    if (Platform.isIOS) {
+      print('📱 [FCM:TOKEN] iOS detected - checking APNS token...');
+      String? apnsToken = await messaging.getAPNSToken();
+
+      // If APNS token is not available, wait and retry
+      if (apnsToken == null) {
+        print('⏳ [FCM:TOKEN] APNS token not available yet, waiting...');
+        int retryCount = 0;
+        const maxRetries = 5;
+
+        while (apnsToken == null && retryCount < maxRetries) {
+          await Future.delayed(const Duration(seconds: 2));
+          apnsToken = await messaging.getAPNSToken();
+          retryCount++;
+          print(
+              '⏳ [FCM:TOKEN] Retry $retryCount/$maxRetries - APNS token: ${apnsToken != null ? "available" : "not available"}');
+        }
+
+        if (apnsToken == null) {
+          print(
+              '❌ [FCM:TOKEN] APNS token still not available after $maxRetries retries');
+          print(
+              'ℹ️ [FCM:TOKEN] This might be a simulator (push notifications not fully supported)');
+          return null;
+        }
+      }
+
+      print(
+          '✅ [FCM:TOKEN] APNS token is available: ${apnsToken.substring(0, 20)}...');
+    }
+
     String? token = await messaging.getToken();
 
     if (token != null) {
@@ -713,11 +746,11 @@ Future<void> _initializeFirebaseAndFCM() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Run app immediately, initialize Firebase/FCM in background
-  runApp(MyApp());
+  // Initialize Firebase and FCM before running app
+  await _initializeFirebaseAndFCM();
 
-  // Initialize Firebase and FCM in background (non-blocking)
-  _initializeFirebaseAndFCM();
+  // Run app after Firebase is initialized
+  runApp(MyApp());
 }
 
 class MyHttpOverrides extends HttpOverrides {
