@@ -543,7 +543,7 @@ class _SettingScreenState extends State<SettingScreen> {
                             ),
                             const Spacer(),
                             Text(
-                              '1.2.8',
+                              '1.3.0',
                               style: TextStyle(
                                 fontSize: isTablet ? 18.0 : 16.0,
                                 color: Colors.grey[600],

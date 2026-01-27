@@ -28,6 +28,12 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikasi memerlukan akses kamera untuk memindai QR code dan barcode pada proses stock opname, fixed asset, dan vendor management</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Aplikasi memerlukan akses galeri foto untuk mengambil dan menyimpan gambar produk, aset, dan dokumentasi lainnya</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>V2RP memerlukan izin notifikasi untuk memberi tahu Anda tentang persetujuan, pembaruan, dan aktivitas penting dalam aplikasi</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
@@ -52,9 +58,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>Aplikasi memerlukan akses kamera untuk memindai QR code dan barcode pada proses stock opname, fixed asset, dan vendor management</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Aplikasi memerlukan akses galeri foto untuk mengambil dan menyimpan gambar produk, aset, dan dokumentasi lainnya</string>
 </dict>
 </plist>
