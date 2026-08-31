@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>v2rp.ios</string>
+	<string>com.eunoiatekno.v2rpMobile</string>
 	<key>PROJECT_ID</key>
 	<string>notification-project-6ebee</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:289702301071:ios:aef932842943e4b365cffa</string>
+	<string>1:289702301071:ios:9f07761b4f4fb74e65cffa</string>
 </dict>
 </plist>
