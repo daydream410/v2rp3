@@ -876,7 +876,7 @@ class _ApprovalDetailItemsColumnState extends State<ApprovalDetailItemsColumn> {
               padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
               child: ApprovalItemsHeader(
                 count: widget.count,
-                hint: 'Geser horizontal untuk kolom lainnya',
+                hint: 'Tap baris untuk detail · Geser horizontal',
               ),
             ),
             Expanded(
@@ -974,6 +974,18 @@ class ApprovalItemsDataTable extends StatelessWidget {
         l.contains('pph');
   }
 
+  void _openRowDetail(BuildContext context, int index) {
+    final fields = rows[index];
+    final header = approvalItemRowHeader(fields);
+    showApprovalItemDetail(
+      context: context,
+      index: index + 1,
+      title: header.title,
+      subtitle: header.subtitle,
+      fields: fields,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) {
@@ -1031,13 +1043,19 @@ class ApprovalItemsDataTable extends StatelessWidget {
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               for (final label in labels)
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                  child: _TableCellText(
-                    value: _cellForRow(rows[i], label),
-                    alignEnd: _isMoneyColumn(label),
-                    bold: _isMoneyColumn(label),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _openRowDetail(context, i),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 10),
+                      child: _TableCellText(
+                        value: _cellForRow(rows[i], label),
+                        alignEnd: _isMoneyColumn(label),
+                        bold: _isMoneyColumn(label),
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -2033,6 +2051,75 @@ class _ItemDetailSection extends StatelessWidget {
       ),
     );
   }
+}
+
+String? _approvalFieldValue(
+  List<ApprovalInfoField> fields, {
+  required List<String> labels,
+}) {
+  for (final pattern in labels) {
+    final p = pattern.toLowerCase();
+    for (final f in fields) {
+      final l = f.label.toLowerCase();
+      if (l == p || l.contains(p)) {
+        final v = f.value.trim();
+        if (v.isNotEmpty && v != '-') return v;
+      }
+    }
+  }
+  return null;
+}
+
+bool _isSkippableTitleField(String label) {
+  final l = label.toLowerCase();
+  return l == 'amount' ||
+      l == 'qty' ||
+      l == 'unit' ||
+      l == 'ccy' ||
+      l.contains('price') ||
+      l.contains('budget') ||
+      l.contains('total') ||
+      l.contains('tax');
+}
+
+({String title, String? subtitle}) approvalItemRowHeader(
+    List<ApprovalInfoField> fields) {
+  final title = _approvalFieldValue(fields, labels: [
+    'item name',
+    'item/acc name',
+    'item/ acc name',
+    'desc',
+    'item',
+    'document no',
+    'invoice no',
+    'type',
+    'stockname',
+  ]);
+
+  String? fallbackTitle;
+  for (final f in fields) {
+    if (_isSkippableTitleField(f.label)) continue;
+    final v = f.value.trim();
+    if (v.isNotEmpty && v != '-') {
+      fallbackTitle = v;
+      break;
+    }
+  }
+
+  final subtitle = _approvalFieldValue(fields, labels: [
+    'project name',
+    'item/ acc no',
+    'item/acc no',
+    'stockcode',
+    'request by',
+    'from mu no',
+    'warehouse',
+  ]);
+
+  return (
+    title: title ?? fallbackTitle ?? 'Item',
+    subtitle: subtitle,
+  );
 }
 
 void showApprovalItemDetail({

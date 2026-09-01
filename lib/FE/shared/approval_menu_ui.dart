@@ -724,20 +724,12 @@ class ApprovalMenuTile extends StatelessWidget {
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Container(
+                  SizedBox(
                     width: 52,
                     height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(13),
-                      child: Image.asset(
-                        imageAsset,
-                        fit: BoxFit.cover,
-                      ),
+                    child: Image.asset(
+                      imageAsset,
+                      fit: BoxFit.contain,
                     ),
                   ),
                   if (count > 0)
