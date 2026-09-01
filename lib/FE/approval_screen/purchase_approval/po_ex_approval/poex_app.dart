@@ -72,9 +72,8 @@ class _PoExAppState extends State<PoExApp> {
                                               different: item
                                                   ['header']['different'],
                                               budgetavailable:
-                                                  item['header']
-                                                          ['budget']
-                                                      ['budgetavailable'],
+                                                  approvalBudgetAvailable(
+                                                      item['header']),
                                               tipe: tipe,
                                             ));
   }

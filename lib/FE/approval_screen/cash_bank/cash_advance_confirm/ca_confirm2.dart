@@ -92,7 +92,7 @@ class _CashAdvanceConfirm2State extends State<CashAdvanceConfirm2> {
       ApprovalInfoField('QTY', (e['qty'].toString())),
       ApprovalInfoField('Price/ Unit', (ApprovalTheme.currencyFmt.format(e['harga'])).toString()),
       ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(e['amount'])).toString()),
-      ApprovalInfoField('Budget Avail', (ApprovalTheme.currencyFmt.format(e['budget']['budgetavailable'])).toString()),
+      ApprovalInfoField('Budget Avail', (ApprovalTheme.currencyFmt.format(approvalBudgetAvailable(e))).toString()),
     ];
   }
   Widget _buildBody() {

@@ -82,7 +82,7 @@ class _CaSetApproval2State extends State<CaSetApproval2> {
       ApprovalInfoField('QTY', (e['qty'].toString())),
       ApprovalInfoField('Price', (ApprovalTheme.currencyFmt.format(e['harga'])).toString()),
       ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(e['amount'])).toString()),
-      ApprovalInfoField('Buget Avail', (ApprovalTheme.currencyFmt.format(e['budget']['budgetavailable'])).toString()),
+      ApprovalInfoField('Buget Avail', (ApprovalTheme.currencyFmt.format(approvalBudgetAvailable(e))).toString()),
     ];
   }
   Widget _buildBody() {

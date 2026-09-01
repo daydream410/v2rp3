@@ -146,6 +146,21 @@ List<ApprovalInfoField> approvalMergeFields(
   ];
 }
 
+/// Reads budget available from item/header map when [budget] may be null.
+num approvalBudgetAvailable(dynamic item) {
+  if (item is! Map) return 0;
+  final budget = item['budget'];
+  if (budget is Map) {
+    final value = budget['budgetavailable'];
+    if (value is num) return value;
+    if (value != null) return num.tryParse(value.toString()) ?? 0;
+  }
+  final direct = item['budgetavailable'];
+  if (direct is num) return direct;
+  if (direct != null) return num.tryParse(direct.toString()) ?? 0;
+  return 0;
+}
+
 /// Standard SPPBJ / purchase confirm item fields — matches original DataTable columns.
 List<ApprovalInfoField> approvalSppbjItemFields(dynamic item) {
   return [
@@ -167,8 +182,7 @@ List<ApprovalInfoField> approvalSppbjItemFields(dynamic item) {
         'Amount', ApprovalTheme.currencyFmt.format(item['amount'] ?? 0)),
     ApprovalInfoField(
         'Budget Avail',
-        ApprovalTheme.currencyFmt
-            .format(item['budget']?['budgetavailable'] ?? 0)),
+        ApprovalTheme.currencyFmt.format(approvalBudgetAvailable(item))),
   ];
 }
 
