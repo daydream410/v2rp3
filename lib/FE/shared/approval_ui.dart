@@ -161,6 +161,25 @@ num approvalBudgetAvailable(dynamic item) {
   return 0;
 }
 
+/// Account name line: [itemcoa] + [rem] from API item row.
+String approvalAccountName(dynamic item) {
+  if (item is! Map) return '-';
+  final coa = item['itemcoa']?.toString().trim() ?? '';
+  final rem = item['rem']?.toString().trim() ?? '';
+  if (coa.isNotEmpty && rem.isNotEmpty) return '$coa - $rem';
+  if (coa.isNotEmpty) return coa;
+  if (rem.isNotEmpty) return rem;
+  return '-';
+}
+
+/// Cash advance line type: 0 = Budget, 1 = Item.
+String approvalCashAdvanceTypeLabel(dynamic tipe) {
+  final value = tipe?.toString();
+  if (value == '0') return 'Budget';
+  if (value == '1') return 'Item';
+  return value ?? '-';
+}
+
 /// Standard SPPBJ / purchase confirm item fields — matches original DataTable columns.
 List<ApprovalInfoField> approvalSppbjItemFields(dynamic item) {
   return [
@@ -171,7 +190,7 @@ List<ApprovalInfoField> approvalSppbjItemFields(dynamic item) {
     ApprovalInfoField(
         'Item Account No', item['itemcoa']?.toString() ?? ''),
     ApprovalInfoField(
-        'Item/ Account Name', item['itemname']?.toString() ?? ''),
+        'Item/ Account Name', approvalAccountName(item)),
     ApprovalInfoField('Remark SPPBJ', item['ket']?.toString() ?? ''),
     ApprovalInfoField('Unit', item['unit']?.toString() ?? ''),
     ApprovalInfoField('Qty', item['qty']?.toString() ?? ''),
@@ -734,6 +753,10 @@ class ApprovalItemsHeader extends StatelessWidget {
   final String hint;
   final VoidCallback? onExpandAll;
   final VoidCallback? onCollapseAll;
+  final bool selectable;
+  final bool allSelected;
+  final bool someSelected;
+  final VoidCallback? onToggleSelectAll;
 
   const ApprovalItemsHeader({
     super.key,
@@ -741,10 +764,19 @@ class ApprovalItemsHeader extends StatelessWidget {
     this.hint = '',
     this.onExpandAll,
     this.onCollapseAll,
+    this.selectable = false,
+    this.allSelected = false,
+    this.someSelected = false,
+    this.onToggleSelectAll,
   });
 
   @override
   Widget build(BuildContext context) {
+    final showHint = hint.trim().isNotEmpty &&
+        onExpandAll == null &&
+        onCollapseAll == null &&
+        !selectable;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
       child: Row(
@@ -777,14 +809,31 @@ class ApprovalItemsHeader extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     color: ApprovalTheme.primary)),
           ),
-          const Spacer(),
+          if (showHint) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                hint,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+              ),
+            ),
+          ] else
+            const Spacer(),
+          if (selectable && onToggleSelectAll != null) ...[
+            _HeaderActionChip(
+              label: allSelected ? 'Batal pilih' : 'Pilih semua',
+              onTap: onToggleSelectAll!,
+            ),
+            const SizedBox(width: 6),
+          ],
           if (onExpandAll != null && onCollapseAll != null) ...[
             _HeaderActionChip(label: 'Buka semua', onTap: onExpandAll!),
             const SizedBox(width: 6),
             _HeaderActionChip(label: 'Tutup semua', onTap: onCollapseAll!),
-          ] else if (hint.trim().isNotEmpty)
-            Text(hint,
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+          ],
         ],
       ),
     );
@@ -864,6 +913,39 @@ class _ApprovalDetailItemsColumnState extends State<ApprovalDetailItemsColumn> {
     });
   }
 
+  void _toggleSelectAll() {
+    final rows = widget.tableRows;
+    if (rows == null || rows.isEmpty) return;
+
+    final selectAll = !_isAllSelected();
+    for (var i = 0; i < rows.length; i++) {
+      final selected = widget.isRowSelected?.call(i) ?? false;
+      if (selectAll && !selected) {
+        widget.onRowSelectionChanged?.call(i, true);
+      } else if (!selectAll && selected) {
+        widget.onRowSelectionChanged?.call(i, false);
+      }
+    }
+  }
+
+  bool _isAllSelected() {
+    final rows = widget.tableRows;
+    if (rows == null || rows.isEmpty) return false;
+    for (var i = 0; i < rows.length; i++) {
+      if (!(widget.isRowSelected?.call(i) ?? false)) return false;
+    }
+    return true;
+  }
+
+  bool _isSomeSelected() {
+    final rows = widget.tableRows;
+    if (rows == null || rows.isEmpty) return false;
+    for (var i = 0; i < rows.length; i++) {
+      if (widget.isRowSelected?.call(i) ?? false) return true;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isTable = widget.tableRows != null;
@@ -891,6 +973,11 @@ class _ApprovalDetailItemsColumnState extends State<ApprovalDetailItemsColumn> {
               child: ApprovalItemsHeader(
                 count: widget.count,
                 hint: 'Tap baris untuk detail · Geser horizontal',
+                selectable: widget.selectable,
+                allSelected: _isAllSelected(),
+                someSelected: _isSomeSelected(),
+                onToggleSelectAll:
+                    widget.selectable ? _toggleSelectAll : null,
               ),
             ),
             Expanded(
@@ -899,6 +986,8 @@ class _ApprovalDetailItemsColumnState extends State<ApprovalDetailItemsColumn> {
                 selectable: widget.selectable,
                 isRowSelected: widget.isRowSelected,
                 onRowSelectionChanged: widget.onRowSelectionChanged,
+                onToggleSelectAll:
+                    widget.selectable ? _toggleSelectAll : null,
               ),
             ),
             if (widget.children.isNotEmpty)
@@ -954,6 +1043,7 @@ class ApprovalItemsDataTable extends StatelessWidget {
   final bool selectable;
   final bool Function(int index)? isRowSelected;
   final void Function(int index, bool? selected)? onRowSelectionChanged;
+  final VoidCallback? onToggleSelectAll;
 
   const ApprovalItemsDataTable({
     super.key,
@@ -961,6 +1051,7 @@ class ApprovalItemsDataTable extends StatelessWidget {
     this.selectable = false,
     this.isRowSelected,
     this.onRowSelectionChanged,
+    this.onToggleSelectAll,
   });
 
   List<String> get _columnLabels {
@@ -1010,6 +1101,13 @@ class ApprovalItemsDataTable extends StatelessWidget {
     }
 
     final labels = _columnLabels;
+    final allSelected = rows.isNotEmpty &&
+        rows.asMap().keys.every((i) => isRowSelected?.call(i) ?? false);
+    final someSelected =
+        rows.asMap().keys.any((i) => isRowSelected?.call(i) ?? false);
+    final headerCheckValue =
+        allSelected ? true : (someSelected ? null : false);
+
     final border = TableBorder(
       top: BorderSide(color: Colors.grey.shade300),
       bottom: BorderSide(color: Colors.grey.shade300),
@@ -1021,7 +1119,7 @@ class ApprovalItemsDataTable extends StatelessWidget {
 
     final table = Table(
       columnWidths: {
-        if (selectable) 0: const FixedColumnWidth(44),
+        if (selectable) 0: const FixedColumnWidth(48),
         for (var i = 0; i < labels.length; i++)
           i + (selectable ? 1 : 0): const FixedColumnWidth(104),
       },
@@ -1033,7 +1131,20 @@ class ApprovalItemsDataTable extends StatelessWidget {
             color: ApprovalTheme.primary.withOpacity(0.08),
           ),
           children: [
-            if (selectable) const SizedBox(height: 46),
+            if (selectable)
+              SizedBox(
+                width: 48,
+                child: Checkbox(
+                  tristate: true,
+                  value: headerCheckValue,
+                  activeColor: ApprovalTheme.primary,
+                  onChanged: rows.isEmpty
+                      ? null
+                      : (_) => onToggleSelectAll?.call(),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
             for (final label in labels)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
@@ -1050,11 +1161,15 @@ class ApprovalItemsDataTable extends StatelessWidget {
             ),
             children: [
               if (selectable)
-                Checkbox(
-                  value: isRowSelected?.call(i) ?? false,
-                  activeColor: ApprovalTheme.primary,
-                  onChanged: (v) => onRowSelectionChanged?.call(i, v),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                SizedBox(
+                  width: 48,
+                  child: Checkbox(
+                    value: isRowSelected?.call(i) ?? false,
+                    activeColor: ApprovalTheme.primary,
+                    onChanged: (v) => onRowSelectionChanged?.call(i, v),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
               for (final label in labels)
                 Material(
@@ -2100,6 +2215,7 @@ bool _isSkippableTitleField(String label) {
     List<ApprovalInfoField> fields) {
   final title = _approvalFieldValue(fields, labels: [
     'item name',
+    'account name',
     'item/acc name',
     'item/ acc name',
     'desc',

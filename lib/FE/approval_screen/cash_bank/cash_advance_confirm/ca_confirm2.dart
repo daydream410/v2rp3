@@ -86,7 +86,7 @@ class _CashAdvanceConfirm2State extends State<CashAdvanceConfirm2> {
       ApprovalInfoField('Request By', (e['requestorname'] ?? '').toString()),
       ApprovalInfoField('Project Name', (e['projectname'] ?? '').toString()),
       ApprovalInfoField('Item/ Acc No', (e['itemcoa'] ?? '').toString()),
-      ApprovalInfoField('Item/Acc Name', (e['rem'] ?? '').toString()),
+      ApprovalInfoField('Item/Acc Name', approvalAccountName(e)),
       ApprovalInfoField('Desc', (e['ket'] ?? '').toString()),
       ApprovalInfoField('Unit', (e['unit'].toString())),
       ApprovalInfoField('QTY', (e['qty'].toString())),

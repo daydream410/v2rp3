@@ -85,7 +85,7 @@ class _CaSettleConfirm2State extends State<CaSettleConfirm2> {
       ApprovalInfoField('Request By', (e['requestorname'] ?? '').toString()),
       ApprovalInfoField('Project Name', (e['projectname'] ?? '').toString()),
       ApprovalInfoField('Item/ Acc No', (e['itemcoa'] ?? '').toString()),
-      ApprovalInfoField('Item/Acc Name', (e['rem'] ?? '').toString()),
+      ApprovalInfoField('Item/Acc Name', approvalAccountName(e)),
       ApprovalInfoField('Desc', (e['ket'] ?? '').toString()),
       ApprovalInfoField('QTY', (e['qty'].toString())),
       ApprovalInfoField('Price/ Unit', (ApprovalTheme.currencyFmt.format(e['harga'])).toString()),

@@ -76,7 +76,7 @@ class _SppbjApp2State extends State<SppbjApp2> {
       ApprovalInfoField('SPPBJ No', (e['sppbjno'] ?? '').toString()),
       ApprovalInfoField('Project Name', (e['projectname'] ?? '').toString()),
       ApprovalInfoField('Req By', (e['requestorname'] ?? '').toString()),
-      ApprovalInfoField('Account/ Item', e['itemcoa']?.toString() ?? '-'),
+      ApprovalInfoField('Account Name', approvalAccountName(e)),
       ApprovalInfoField('Item Name', e['itemname']?.toString() ?? '-'),
       ApprovalInfoField('Description', e['ket']?.toString() ?? '-'),
       ApprovalInfoField('Unit', (e['unit'].toString())),
