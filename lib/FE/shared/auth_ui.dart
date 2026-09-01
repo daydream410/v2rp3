@@ -347,6 +347,7 @@ class _AuthScreenShellState extends State<AuthScreenShell>
 class AuthHeroShell extends StatefulWidget {
   final AuthStep step;
   final String title;
+  final String? subtitle;
   final Widget child;
   final VoidCallback? onBack;
   final bool showDecorPills;
@@ -355,6 +356,7 @@ class AuthHeroShell extends StatefulWidget {
     super.key,
     required this.step,
     required this.title,
+    this.subtitle,
     required this.child,
     this.onBack,
     this.showDecorPills = false,
@@ -375,6 +377,7 @@ class AuthLoginShell extends StatelessWidget {
     return AuthHeroShell(
       step: AuthStep.login,
       title: 'Welcome Aboard',
+      subtitle: 'Vessel Vindo Resource Planning',
       showDecorPills: true,
       child: form,
     );
@@ -559,6 +562,20 @@ class _AuthHeroShellState extends State<AuthHeroShell>
                               letterSpacing: 0.5,
                             ),
                           ),
+                          if (widget.subtitle != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              widget.subtitle!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.72),
+                                fontSize: layout.isTablet ? 15 : 13,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.35,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
                           if (widget.showDecorPills) ...[
                             const SizedBox(height: 16),
                             _LoginDecorRow(

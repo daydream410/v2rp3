@@ -18,13 +18,15 @@ class OtpVerificationScreen extends StatefulWidget {
 }
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
+  static const _resendCooldownSeconds = 5 * 60;
+
   final List<TextEditingController> _otpControllers =
       List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   Timer? _countdownTimer;
-  int _countdown = 180;
+  int _countdown = _resendCooldownSeconds;
 
   @override
   void initState() {
@@ -252,7 +254,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
       if (MsgHeader.resendOtpSuccess == true) {
         if (mounted) {
-          setState(() => _countdown = 180);
+          setState(() => _countdown = _resendCooldownSeconds);
           _startCountdown();
 
           for (final controller in _otpControllers) {
@@ -320,7 +322,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const AuthHeroSubtitle(
-              text: 'Enter the 6-digit code from email, Telegram, or WhatsApp',
+              text:
+                  'Enter the 6-digit code from email, Telegram, or WhatsApp. '
+                  'Code is valid for 5 minutes.',
             ),
             const SizedBox(height: 16),
             const AuthOtpChannelsRow(),
