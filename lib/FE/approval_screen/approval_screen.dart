@@ -5,8 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:v2rp3/utils/hex_color.dart';
-import 'package:liquid_pull_to_refresh/liquid_pull_to_refresh.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/FE/approval_screen/cash_bank/cash_advance_confirm/ca_confirm.dart';
@@ -26,7 +25,7 @@ import 'package:v2rp3/FE/approval_screen/purchase_approval/sppbj_approval/sppbj_
 import 'package:v2rp3/FE/approval_screen/purchase_approval/sppbj_confirm/sppbj_confirm.dart';
 import 'package:v2rp3/FE/approval_screen/sales_approval/ar_app/ar_app.dart';
 import 'package:v2rp3/FE/approval_screen/sales_approval/sales_order_app/sales_order_app.dart';
-import 'package:badges/badges.dart' as badges;
+import 'package:v2rp3/FE/shared/approval_menu_ui.dart';
 import '../../BE/controller.dart';
 import '../../BE/reqip.dart';
 import '../../BE/resD.dart';
@@ -56,18 +55,12 @@ class ApprovalScreen extends StatefulWidget {
 }
 
 class _ApprovalScreenState extends State<ApprovalScreen> {
+  final RefreshController _refreshController = RefreshController();
   Timer? _timeoutTimer;
   bool _isFetching = false;
-  bool _isLoading = false;
-  bool selected = false;
-  String idSelected = "0";
-  bool isVisible1 = true;
-  bool isVisible2 = true;
-  bool isVisible3 = true;
-  bool isVisible4 = true;
-  bool isVisible5 = true;
-  bool notZero = true;
-  bool showTooltip = true;
+  bool _isInitialLoading = true;
+  bool _hasLoadedOnce = false;
+  String idSelected = '0';
   int totalSC = 0;
   int totalSA = 0;
   int totalPA = 0;
@@ -112,8 +105,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   @override
   void initState() {
     super.initState();
-    // Delay data fetching to avoid blocking navigation
-    Timer(const Duration(seconds: 1), () {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         try {
           getDataa();
@@ -122,19 +114,357 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
         }
       }
     });
-    // Hide tooltip after 5 seconds
-    Timer(const Duration(seconds: 5), () {
-      if (mounted) {
-        setState(() {
-          showTooltip = false;
-        });
+  }
+
+  @override
+  void dispose() {
+    _refreshController.dispose();
+    _timeoutTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _onPullRefresh() async {
+    final started = DateTime.now();
+    try {
+      await getDataa2();
+    } finally {
+      final elapsed = DateTime.now().difference(started);
+      const minDuration = Duration(milliseconds: 900);
+      if (elapsed < minDuration) {
+        await Future.delayed(minDuration - elapsed);
       }
-    });
+      if (mounted) {
+        _refreshController.refreshCompleted();
+      }
+    }
+  }
+
+  static const _filterDefs = [
+    (id: '0', label: 'All', icon: Icons.grid_view_rounded),
+    (id: '1', label: 'Cash & Bank', icon: Icons.account_balance_wallet_outlined),
+    (id: '2', label: 'Sales', icon: Icons.point_of_sale_outlined),
+    (id: '3', label: 'Purchase', icon: Icons.shopping_cart_outlined),
+    (id: '4', label: 'Inventory', icon: Icons.inventory_2_outlined),
+    (id: '5', label: 'PPC', icon: Icons.precision_manufacturing_outlined),
+  ];
+
+  int get _cashBankPending => totalKC + totalKA + totalLC + totalLA;
+
+  int get _salesPending => totalARRA + totalSOA;
+
+  int get _purchasePending =>
+      totalSC +
+      totalSA +
+      totalPA +
+      totalNA +
+      totalDPA +
+      totalAPRA +
+      totalAPAA +
+      totalDNA +
+      poGabung +
+      supplierGabung;
+
+  int get _inventoryPending =>
+      totalMUA +
+      totalGRA +
+      totalITA +
+      totalSMA +
+      totalSAA +
+      totalSTUA +
+      totalAA +
+      totalMRA +
+      totalSTA +
+      itGabung +
+      totalSPA +
+      totalMMU;
+
+  int get _ppcPending => totalWoApp + totalWoCompleted;
+
+  int get _allPending =>
+      _cashBankPending +
+      _salesPending +
+      _purchasePending +
+      _inventoryPending +
+      _ppcPending;
+
+  int _pendingForCategory(String id) {
+    switch (id) {
+      case '1':
+        return _cashBankPending;
+      case '2':
+        return _salesPending;
+      case '3':
+        return _purchasePending;
+      case '4':
+        return _inventoryPending;
+      case '5':
+        return _ppcPending;
+      default:
+        return _allPending;
+    }
+  }
+
+  List<ApprovalMenuFilter> get _categoryFilters => [
+        for (final def in _filterDefs)
+          ApprovalMenuFilter(
+            id: def.id,
+            label: def.label,
+            icon: def.icon,
+            badgeCount: _pendingForCategory(def.id),
+          ),
+      ];
+
+  bool _showsSection(String sectionId) =>
+      idSelected == '0' || idSelected == sectionId;
+
+  void _openIfHasData(int count, Widget Function() page) {
+    if (count == 0) {
+      wakwaw();
+    } else {
+      Get.to(() => page());
+    }
+  }
+
+  int get _totalPending {
+    var total = 0;
+    for (final s in _visibleSections()) {
+      total += s.totalPending;
+    }
+    return total;
+  }
+
+  List<ApprovalMenuSectionData> _visibleSections() {
+    return [
+      if (_showsSection('1')) _cashBankSection(),
+      if (_showsSection('2')) _salesSection(),
+      if (_showsSection('3')) _purchaseSection(),
+      if (_showsSection('4')) _inventorySection(),
+      if (_showsSection('5')) _ppcSection(),
+    ];
+  }
+
+  ApprovalMenuSectionData _cashBankSection() => ApprovalMenuSectionData(
+        title: 'Cash & Bank',
+        icon: Icons.account_balance_wallet_outlined,
+        items: [
+          ApprovalMenuItemData(
+            title: 'Cash Advance\nConfirmation',
+            imageAsset: 'images/cashbankapp.png',
+            count: totalKC,
+            onTap: () => _openIfHasData(totalKC, () => CashAdvanceConfirm()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Cash Advance\nApproval',
+            imageAsset: 'images/cashadvanceapp.png',
+            count: totalKA,
+            onTap: () => _openIfHasData(totalKA, () => CashAdvanceApproval()),
+          ),
+          ApprovalMenuItemData(
+            title: 'C/A Settlement\nConfirmation',
+            imageAsset: 'images/casettlement.png',
+            count: totalLC,
+            onTap: () => _openIfHasData(totalLC, () => CaSettleConfirm()),
+          ),
+          ApprovalMenuItemData(
+            title: 'C/A Settlement\nApproval',
+            imageAsset: 'images/casettlementapp.png',
+            count: totalLA,
+            onTap: () => _openIfHasData(totalLA, () => CaSetApproval()),
+          ),
+        ],
+      );
+
+  ApprovalMenuSectionData _salesSection() => ApprovalMenuSectionData(
+        title: 'Sales',
+        icon: Icons.point_of_sale_outlined,
+        items: [
+          ApprovalMenuItemData(
+            title: 'A/R Receipt\nApproval',
+            imageAsset: 'images/arreceipt.png',
+            count: totalARRA,
+            onTap: () => _openIfHasData(totalARRA, () => ArApproval()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Sales Order\nApproval',
+            imageAsset: 'images/salesapp.png',
+            count: totalSOA,
+            onTap: () => _openIfHasData(totalSOA, () => SalesOrderApproval()),
+          ),
+        ],
+      );
+
+  ApprovalMenuSectionData _purchaseSection() => ApprovalMenuSectionData(
+        title: 'Purchase',
+        icon: Icons.shopping_cart_outlined,
+        items: [
+          ApprovalMenuItemData(
+            title: 'SPPBJ\nConfirmation',
+            imageAsset: 'images/sppbj.png',
+            count: totalSC,
+            onTap: () => _openIfHasData(totalSC, () => SppbjConfirm()),
+          ),
+          ApprovalMenuItemData(
+            title: 'SPPBJ\nApproval',
+            imageAsset: 'images/sppbjapp.png',
+            count: totalSA,
+            onTap: () => _openIfHasData(totalSA, () => SppbjApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'PO SCM\nApproval',
+            imageAsset: 'images/poscm.png',
+            count: totalPA,
+            onTap: () => _openIfHasData(totalPA, () => PoScmApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'New Payable\nApproval',
+            imageAsset: 'images/newpayable.png',
+            count: totalNA,
+            onTap: () => _openIfHasData(totalNA, () => NpApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'DP Request\nApproval',
+            imageAsset: 'images/dpreqapp.png',
+            count: totalDPA,
+            onTap: () => _openIfHasData(totalDPA, () => DpReqApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'A/P Refund\nApproval',
+            imageAsset: 'images/aprefund.png',
+            count: totalAPRA,
+            onTap: () => _openIfHasData(totalAPRA, () => ApRefundApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'A/P Adjustment\nApproval',
+            imageAsset: 'images/apadjustmentapp.png',
+            count: totalAPAA,
+            onTap: () => _openIfHasData(totalAPAA, () => ApAdjApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'D/N Supplier\nApproval',
+            imageAsset: 'images/dnsupplier.png',
+            count: totalDNA,
+            onTap: () => _openIfHasData(totalDNA, () => DebitNotesApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'PO Exception\nApproval',
+            imageAsset: 'images/poexception.png',
+            count: poGabung,
+            onTap: () => _openIfHasData(poGabung, () => PoExApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'PO SCM Supplier\nUnapproved',
+            imageAsset: 'images/supplier.png',
+            count: supplierGabung,
+            onTap: () => _openIfHasData(supplierGabung, () => PoUnapproved()),
+          ),
+        ],
+      );
+
+  ApprovalMenuSectionData _inventorySection() => ApprovalMenuSectionData(
+        title: 'Inventory',
+        icon: Icons.inventory_2_outlined,
+        items: [
+          ApprovalMenuItemData(
+            title: 'Material Use\nApproval',
+            imageAsset: 'images/muapp.png',
+            count: totalMUA,
+            onTap: () => _openIfHasData(totalMUA, () => MuApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Goods Receive\nApproval',
+            imageAsset: 'images/grapp.png',
+            count: totalGRA,
+            onTap: () => _openIfHasData(totalGRA, () => GrApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Internal Transfer\nApproval',
+            imageAsset: 'images/itapp.png',
+            count: totalITA,
+            onTap: () => _openIfHasData(totalITA, () => ItApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Stock Movement\nApproval',
+            imageAsset: 'images/smapp.png',
+            count: totalSMA,
+            onTap: () => _openIfHasData(totalSMA, () => SmApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Stock Adjustment\nApproval',
+            imageAsset: 'images/stockadjapp.png',
+            count: totalSAA,
+            onTap: () => _openIfHasData(totalSAA, () => StockAdjApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Stock Top Up\nApproval',
+            imageAsset: 'images/stocktopup.png',
+            count: totalSTUA,
+            onTap: () => _openIfHasData(totalSTUA, () => StockTopupApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Assembling\nApproval',
+            imageAsset: 'images/assembling.png',
+            count: totalAA,
+            onTap: () => _openIfHasData(totalAA, () => AssemblingApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Material Return\nApproval',
+            imageAsset: 'images/materialreturnapp.png',
+            count: totalMRA,
+            onTap: () => _openIfHasData(totalMRA, () => MrApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Stock Transfer\nApproval',
+            imageAsset: 'images/stocktransferapp.png',
+            count: totalSTA,
+            onTap: () => _openIfHasData(totalSTA, () => StockTrfApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'IT Stock Adj\nApproval',
+            imageAsset: 'images/itstockadj.png',
+            count: itGabung,
+            onTap: () => _openIfHasData(itGabung, () => ItStockAdjApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Stock Price\nApproval',
+            imageAsset: 'images/stockpriceapp.png',
+            count: totalSPA,
+            onTap: () => _openIfHasData(totalSPA, () => StockPriceApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Update Min/Max\nApproval',
+            imageAsset: 'images/updateminmax.png',
+            count: totalMMU,
+            onTap: () => _openIfHasData(totalMMU, () => UpdateMinMaxApp()),
+          ),
+        ],
+      );
+
+  ApprovalMenuSectionData _ppcSection() => ApprovalMenuSectionData(
+        title: 'PPC',
+        icon: Icons.precision_manufacturing_outlined,
+        items: [
+          ApprovalMenuItemData(
+            title: 'Work Order\nApproval',
+            imageAsset: 'images/woapp.png',
+            count: totalWoApp,
+            onTap: () => _openIfHasData(totalWoApp, () => WoApp()),
+          ),
+          ApprovalMenuItemData(
+            title: 'Work Order\nCompleted',
+            imageAsset: 'images/wocomp.png',
+            count: totalWoCompleted,
+            onTap: () => _openIfHasData(totalWoCompleted, () => WoCompleted()),
+          ),
+        ],
+      );
+
+  void _onFilterSelected(String id) {
+    setState(() => idSelected = id);
   }
 
   @override
   Widget build(BuildContext context) {
-    Size size = MediaQuery.of(context).size;
+    final sections = _visibleSections();
     return WillPopScope(
       onWillPop: () async {
         final shouldPop = await showDialog<bool>(
@@ -160,3460 +490,144 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
         return false;
       },
       child: Scaffold(
-        extendBody: true,
-        resizeToAvoidBottomInset: false,
-        backgroundColor: HexColor("#F5F5F7"),
+        backgroundColor: ApprovalMenuTheme.background,
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          centerTitle: true,
-          elevation: 2,
-          backgroundColor: HexColor("#F4A62A"),
+          elevation: 0,
+          backgroundColor: ApprovalMenuTheme.primary,
           title: const Text(
-            "Approval Menu",
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
+            'Approval Menu',
+            style: TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
-        body: LiquidPullToRefresh(
-          onRefresh: getDataa2,
-          color: HexColor("#F4A62A"),
-          height: 150,
-          showChildOpacityTransition: false,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            physics: const BouncingScrollPhysics(),
-            child: SafeArea(
-              child: Stack(
-                children: [
-                  Container(
-                    height: size.height * 0.2, //atur panjang kotak kuning atas
-                    decoration: BoxDecoration(
-                        color: HexColor("#F4A62A"),
-                        borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(45),
-                          bottomRight: Radius.circular(45),
-                        )),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ColoredBox(
+              color: ApprovalMenuTheme.primary,
+              child: ApprovalMenuFilterBar(
+                filters: _categoryFilters,
+                selectedId: idSelected,
+                onSelected: _onFilterSelected,
+              ),
+            ),
+            Expanded(
+              child: ColoredBox(
+                color: ApprovalMenuTheme.background,
+                child: RefreshConfiguration(
+                  headerTriggerDistance: 110,
+                  dragSpeedRatio: 0.65,
+                  springDescription: const SpringDescription(
+                    mass: 2.2,
+                    stiffness: 150,
+                    damping: 16,
                   ),
-                  Positioned(
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 12),
-                        // bar kategori dalam scroll horizontal
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 4),
-                          child: Row(
-                            children: [
-                              FilterChip(
-                                label: const Text('All'),
-                                backgroundColor: Colors.white,
-                                shape: const StadiumBorder(),
-                                selectedColor: HexColor("#F4A62A"),
-                                side: BorderSide(
-                                  color: idSelected == "0"
-                                      ? HexColor("#F4A62A")
-                                      : Colors.grey.shade300,
-                                  width: 1.5,
-                                ),
-                                labelStyle: TextStyle(
-                                  color: idSelected == "0"
-                                      ? Colors.white
-                                      : Colors.black87,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                selected: idSelected == "0",
-                                onSelected: (bool value) {
-                                  setState(() {
-                                    idSelected = "0";
-                                    isVisible1 = true;
-                                    isVisible2 = true;
-                                    isVisible3 = true;
-                                    isVisible4 = true;
-                                    isVisible5 = true;
-                                  });
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              FilterChip(
-                                label: const Text('Cash & Bank'),
-                                backgroundColor: Colors.white,
-                                shape: const StadiumBorder(),
-                                selectedColor: HexColor("#F4A62A"),
-                                side: BorderSide(
-                                  color: idSelected == "1"
-                                      ? HexColor("#F4A62A")
-                                      : Colors.grey.shade300,
-                                  width: 1.5,
-                                ),
-                                labelStyle: TextStyle(
-                                  color: idSelected == "1"
-                                      ? Colors.white
-                                      : Colors.black87,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                selected: idSelected == "1",
-                                onSelected: (bool value) {
-                                  setState(() {
-                                    idSelected = "1";
-                                    isVisible1 = true;
-                                    isVisible2 = false;
-                                    isVisible3 = false;
-                                    isVisible4 = false;
-                                    isVisible5 = false;
-                                  });
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              FilterChip(
-                                label: const Text('Sales'),
-                                backgroundColor: Colors.white,
-                                shape: const StadiumBorder(),
-                                selectedColor: HexColor("#F4A62A"),
-                                side: BorderSide(
-                                  color: idSelected == "2"
-                                      ? HexColor("#F4A62A")
-                                      : Colors.grey.shade300,
-                                  width: 1.5,
-                                ),
-                                labelStyle: TextStyle(
-                                  color: idSelected == "2"
-                                      ? Colors.white
-                                      : Colors.black87,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                selected: idSelected == "2",
-                                onSelected: (bool value) {
-                                  setState(() {
-                                    idSelected = "2";
-                                    isVisible1 = false;
-                                    isVisible2 = true;
-                                    isVisible3 = false;
-                                    isVisible4 = false;
-                                    isVisible5 = false;
-                                  });
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              FilterChip(
-                                label: const Text('Purchase'),
-                                backgroundColor: Colors.white,
-                                shape: const StadiumBorder(),
-                                selectedColor: HexColor("#F4A62A"),
-                                side: BorderSide(
-                                  color: idSelected == "3"
-                                      ? HexColor("#F4A62A")
-                                      : Colors.grey.shade300,
-                                  width: 1.5,
-                                ),
-                                labelStyle: TextStyle(
-                                  color: idSelected == "3"
-                                      ? Colors.white
-                                      : Colors.black87,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                selected: idSelected == "3",
-                                onSelected: (bool value) {
-                                  setState(() {
-                                    idSelected = "3";
-                                    isVisible1 = false;
-                                    isVisible2 = false;
-                                    isVisible3 = true;
-                                    isVisible4 = false;
-                                    isVisible5 = false;
-                                  });
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              FilterChip(
-                                label: const Text('Inventory'),
-                                backgroundColor: Colors.white,
-                                shape: const StadiumBorder(),
-                                selectedColor: HexColor("#F4A62A"),
-                                side: BorderSide(
-                                  color: idSelected == "4"
-                                      ? HexColor("#F4A62A")
-                                      : Colors.grey.shade300,
-                                  width: 1.5,
-                                ),
-                                labelStyle: TextStyle(
-                                  color: idSelected == "4"
-                                      ? Colors.white
-                                      : Colors.black87,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                selected: idSelected == "4",
-                                onSelected: (bool value) {
-                                  setState(() {
-                                    idSelected = "4";
-                                    isVisible1 = false;
-                                    isVisible2 = false;
-                                    isVisible3 = false;
-                                    isVisible4 = true;
-                                    isVisible5 = false;
-                                  });
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              FilterChip(
-                                label: const Text('PPC'),
-                                backgroundColor: Colors.white,
-                                shape: const StadiumBorder(),
-                                selectedColor: HexColor("#F4A62A"),
-                                side: BorderSide(
-                                  color: idSelected == "5"
-                                      ? HexColor("#F4A62A")
-                                      : Colors.grey.shade300,
-                                  width: 1.5,
-                                ),
-                                labelStyle: TextStyle(
-                                  color: idSelected == "5"
-                                      ? Colors.white
-                                      : Colors.black87,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                selected: idSelected == "5",
-                                onSelected: (bool value) {
-                                  setState(() {
-                                    idSelected = "5";
-                                    isVisible1 = false;
-                                    isVisible2 = false;
-                                    isVisible3 = false;
-                                    isVisible4 = false;
-                                    isVisible5 = true;
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        //kotak putih pertama (cash & bank approval)
-                        Visibility(
-                          visible: isVisible1,
-                          child: Container(
-                            margin: EdgeInsets.symmetric(
-                              horizontal:
-                                  size.width * 0.03, //atur lebar kotak putih
-                              vertical:
-                                  size.height * 0.02, //atur lokasi kotak putih
-                            ),
-                            constraints: const BoxConstraints(
-                              maxHeight: double.infinity,
-                            ), //atur panjang kotak putih
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: const BorderRadius.all(
-                                Radius.circular(20),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  offset: const Offset(0, 10),
-                                  blurRadius: 60,
-                                  color: Colors.grey.withOpacity(0.40),
-                                ),
-                              ],
-                            ),
+                  child: SmartRefresher(
+                    controller: _refreshController,
+                    enablePullDown: true,
+                    enablePullUp: false,
+                    onRefresh: _onPullRefresh,
+                    header: WaterDropMaterialHeader(
+                      backgroundColor: Colors.white,
+                      color: ApprovalMenuTheme.primary,
+                      distance: 80,
+                      offset: 12,
+                    ),
+                    child: CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(
+                        parent: BouncingScrollPhysics(),
+                      ),
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: ColoredBox(
+                            color: ApprovalMenuTheme.primary,
                             child: Column(
                               children: [
-                                const SizedBox(height: 10.0),
-                                Row(
-                                  children: [
-                                    Padding(
-                                      padding: EdgeInsets.only(
-                                          left: size.width * 0.05),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: const [
-                                          Text(
-                                            'Cash & Bank Approval',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 20.0,
-                                            ),
-                                          ),
-                                          SizedBox(height: 4),
-                                          Text(
-                                            'Manage cash advance and settlement tasks',
-                                            style: TextStyle(
-                                              fontSize: 12.0,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // baris pertama
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 24, right: 24, top: 24),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalKC == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalKC.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/cashbankapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalKC == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            CashAdvanceConfirm());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Cash',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Advance',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Confirmation',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalKA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalKA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/cashadvanceapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalKA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            CashAdvanceApproval());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Cash',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Advance',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalLC == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalLC.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/casettlement.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalLC == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            const CaSettleConfirm());
-
-                                                    // Get.to(() => StockTable2());
-                                                    // Get.offAll(() => const StockTable2());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'C/A',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Settlement',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Confirmation',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalLA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalLA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/casettlementapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fitWidth,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalLA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            CaSetApproval());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'C/A',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Settlement',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                    ],
+                                const SizedBox(height: 12),
+                                if (_isInitialLoading)
+                                  const ApprovalMenuSummarySkeleton()
+                                else
+                                  ApprovalMenuSummaryCard(
+                                    totalPending: _totalPending,
+                                    sectionCount: sections.length,
                                   ),
-                                ),
-                                const SizedBox(
-                                  height: 30,
-                                ),
                               ],
                             ),
                           ),
                         ),
-                        //kotak putih kedua (sales approval)
-                        Visibility(
-                          visible: isVisible2,
+                        SliverToBoxAdapter(
                           child: Container(
-                            margin: EdgeInsets.symmetric(
-                              horizontal:
-                                  size.width * 0.03, //atur lebar kotak putih
-                              vertical:
-                                  size.height * 0.02, //atur lokasi kotak putih
-                            ),
-                            constraints: const BoxConstraints(
-                              maxHeight: double.infinity,
-                            ), // atur panjang kotak putih
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: const BorderRadius.all(
-                                Radius.circular(20),
+                            height: 16,
+                            decoration: const BoxDecoration(
+                              color: ApprovalMenuTheme.background,
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(24),
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  offset: const Offset(0, 10),
-                                  blurRadius: 60,
-                                  color: Colors.grey.withOpacity(0.40),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                const SizedBox(height: 10.0),
-                                Row(
-                                  children: [
-                                    Padding(
-                                      padding: EdgeInsets.only(
-                                          left: size.width * 0.05),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: const [
-                                          Text(
-                                            'Sales Approval',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 20.0,
-                                            ),
-                                          ),
-                                          SizedBox(height: 4),
-                                          Text(
-                                            'Approve A/R receipts and sales orders',
-                                            style: TextStyle(
-                                              fontSize: 12.0,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // baris pertama
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 34, right: 24, top: 24),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalARRA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalARRA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/arreceipt.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalARRA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(
-                                                            () => ArApproval());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'A/R Receipt',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      // const SizedBox(
-                                      //   width: 20,
-                                      // ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalSOA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalSOA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/salesapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalSOA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            SalesOrderApproval());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Sales Order',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        //colum buat ngisi space kosong
-                                        children: [
-                                          SizedBox(
-                                            width: size.width * 0.37,
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(
-                                  height: 30,
-                                ),
-                              ],
                             ),
                           ),
                         ),
-                        //kotak putih ketiga (purchase approval)
-                        Visibility(
-                          visible: isVisible3,
-                          child: Container(
-                            margin: EdgeInsets.symmetric(
-                              horizontal:
-                                  size.width * 0.03, //atur lebar kotak putih
-                              vertical:
-                                  size.height * 0.02, //atur lokasi kotak putih
+                        if (_isInitialLoading)
+                          const SliverToBoxAdapter(
+                            child: ApprovalMenuLoadingSkeleton(),
+                          )
+                        else if (sections.isEmpty)
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: ColoredBox(
+                              color: ApprovalMenuTheme.background,
+                              child: _buildEmptyCategory(),
                             ),
-                            constraints: const BoxConstraints(
-                              maxHeight: double.infinity,
-                            ), // atur panjang kotak putih
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: const BorderRadius.all(
-                                Radius.circular(20),
+                          )
+                        else
+                          SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) => ApprovalMenuSectionCard(
+                                section: sections[index],
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  offset: const Offset(0, 10),
-                                  blurRadius: 60,
-                                  color: Colors.grey.withOpacity(0.40),
-                                ),
-                              ],
+                              childCount: sections.length,
                             ),
-                            child: Column(
-                              children: [
-                                const SizedBox(height: 10.0),
-                                Row(
-                                  children: [
-                                    Padding(
-                                      padding: EdgeInsets.only(
-                                          left: size.width * 0.05),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: const [
-                                          Text(
-                                            'Purchase Approval',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 20.0,
-                                            ),
-                                          ),
-                                          SizedBox(height: 4),
-                                          Text(
-                                            'Handle SPPBJ, PO SCM, A/P and D/N approvals',
-                                            style: TextStyle(
-                                              fontSize: 12.0,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // baris pertama
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 24, right: 24, top: 24),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalSC == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalSC.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/sppbj.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalSC == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            SppbjConfirm());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'SPPBJ',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Confirmation',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalSA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalSA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/sppbjapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalSA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(
-                                                            () => SppbjApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'SPPBJ',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalPA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalPA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/poscm.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalPA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(
-                                                            () => PoScmApp());
-                                                    // Get.offAll(() => const StockTable2());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'PO SCM',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalNA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalNA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/newpayable.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fitWidth,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalNA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() => NpApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'New Payable',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 24, right: 24, top: 24),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalDPA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalDPA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/dpreqapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalDPA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(
-                                                            () => DpReqApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'D/P',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Request',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalAPRA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalAPRA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/aprefund.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalAPRA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            ApRefundApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'A/P',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Refund',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalAPAA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalAPAA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/apadjustmentapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalAPAA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(
-                                                            () => ApAdjApp());
-
-                                                    // Get.to(() => StockTable2());
-                                                    // Get.offAll(() => const StockTable2());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'A/P',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Adjustment',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalDNA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalDNA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/dnsupplier.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fitWidth,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalDNA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            DebitNotesApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'D/N to',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Supplier',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 24, right: 24, top: 24),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                poGabung == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              poGabung.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/poexception.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    poGabung == 0
-                                                        ? wakwaw()
-                                                        : Get.to(
-                                                            () => PoExApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'PO Exception',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge: supplierGabung == 0
-                                                ? false
-                                                : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              supplierGabung.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/supplier.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    supplierGabung == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            PoUnapproved());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'PO SCM',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Supplier Unapp',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'roved Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        //colum buat ngisi space kosong
-                                        children: [
-                                          SizedBox(
-                                            width: size.width * 0.37,
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(
-                                  height: 30,
-                                ),
-                              ],
-                            ),
+                          ),
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: const ColoredBox(
+                            color: ApprovalMenuTheme.background,
+                            child: SizedBox.expand(),
                           ),
                         ),
-                        //kotak putih ke empat (inventory approval)
-                        Visibility(
-                          visible: isVisible4,
-                          child: Container(
-                            margin: EdgeInsets.symmetric(
-                              horizontal:
-                                  size.width * 0.03, //atur lebar kotak putih
-                              vertical:
-                                  size.height * 0.02, //atur lokasi kotak putih
-                            ),
-                            constraints: const BoxConstraints(
-                              maxHeight: double.infinity,
-                            ), // atur panjang kotak putih
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: const BorderRadius.all(
-                                Radius.circular(20),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  offset: const Offset(0, 10),
-                                  blurRadius: 60,
-                                  color: Colors.grey.withOpacity(0.40),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                const SizedBox(height: 10.0),
-                                Row(
-                                  children: [
-                                    Padding(
-                                      padding: EdgeInsets.only(
-                                          left: size.width * 0.05),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: const [
-                                          Text(
-                                            'Inventory Approval',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 20.0,
-                                            ),
-                                          ),
-                                          SizedBox(height: 4),
-                                          Text(
-                                            'Control stock movements, prices and parameters',
-                                            style: TextStyle(
-                                              fontSize: 12.0,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // baris pertama
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 24, right: 24, top: 24),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalMUA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalMUA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/muapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalMUA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() => MuApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Material',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Used',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalGRA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalGRA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/grapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalGRA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() => GrApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Goods',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Received',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalITA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalITA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/itapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalITA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() => ItApp());
-                                                    // Get.offAll(() => const StockTable2());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Internal',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Transfer',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalSMA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalSMA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/smapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fitWidth,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalSMA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() => SmApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Stock',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Movement',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 24, right: 24, top: 24),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalSAA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalSAA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/stockadjapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalSAA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            StockAdjApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Stock',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Adjustment',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalSTUA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalSTUA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/stocktopup.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalSTUA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            StockTopupApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Stock',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Top Up',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalAA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalAA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/assembling.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalAA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            AssemblingApp());
-                                                    // Get.offAll(() => const StockTable2());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Assembling',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              SizedBox(
-                                                height: 12,
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalMRA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalMRA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/materialreturnapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fitWidth,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalMRA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() => MrApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Material',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Return',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 24, right: 24, top: 24),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalSTA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalSTA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/stocktransferapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalSTA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            StockTrfApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Stock',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Transfer',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                itGabung == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              itGabung.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/itstockadj.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    itGabung == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            ItStockAdjApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'IT/Stock',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Adjustment',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalSPA == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalSPA.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/stockpriceapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalSPA == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            StockPriceApp());
-                                                    // Get.offAll(() => const StockTable2());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Stock',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Price',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalMMU == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalMMU.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/updateminmax.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fitWidth,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalMMU == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            UpdateMinMaxApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Update Min',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Max Stock',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Parameter',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // stock merger
-                                // Padding(
-                                //   padding: const EdgeInsets.only(
-                                //       left: 24, right: 24, top: 24),
-                                //   child: Row(
-                                //     // mainAxisAlignment:
-                                //     //     MainAxisAlignment.spaceAround,
-                                //     children: [
-                                //       Padding(
-                                //         padding: const EdgeInsets.only(left: 12),
-                                //         child: Column(
-                                //           mainAxisSize: MainAxisSize.min,
-                                //           children: [
-                                //             badges.Badge(
-                                //               position:
-                                //                   badges.BadgePosition.topEnd(
-                                //                       top: -10, end: -12),
-                                //               showBadge: false,
-                                //               ignorePointer: false,
-                                //               badgeContent: Text(
-                                //                 totalSA.toString(),
-                                //                 style: const TextStyle(
-                                //                   color: Colors.white,
-                                //                   fontSize: 10.0,
-                                //                 ),
-                                //               ),
-                                //               badgeAnimation: const badges
-                                //                   .BadgeAnimation.rotation(
-                                //                 animationDuration:
-                                //                     Duration(seconds: 1),
-                                //                 colorChangeAnimationDuration:
-                                //                     Duration(seconds: 1),
-                                //                 loopAnimation: false,
-                                //                 curve: Curves.fastOutSlowIn,
-                                //                 colorChangeAnimationCurve:
-                                //                     Curves.easeInCubic,
-                                //               ),
-                                //               badgeStyle: badges.BadgeStyle(
-                                //                 shape: badges.BadgeShape.square,
-                                //                 badgeColor: Colors.red,
-                                //                 padding: const EdgeInsets.all(5),
-                                //                 borderRadius:
-                                //                     BorderRadius.circular(20),
-                                //                 borderSide: const BorderSide(
-                                //                     color: Colors.white,
-                                //                     width: 2),
-                                //                 elevation: 0,
-                                //               ),
-                                //               child: Material(
-                                //                 borderRadius:
-                                //                     BorderRadius.circular(20),
-                                //                 clipBehavior:
-                                //                     Clip.antiAliasWithSaveLayer,
-                                //                 child: Ink.image(
-                                //                   image: const AssetImage(
-                                //                       'images/stockmerger.png'),
-                                //                   height: size.height * 0.05,
-                                //                   width: size.width * 0.15,
-                                //                   // fit: BoxFit.fill,
-                                //                   child: InkWell(
-                                //                     splashColor: Colors.black38,
-                                //                     onTap: () async {
-                                //                       // Get.to(() => CashBank1());
-                                //                     },
-                                //                   ),
-                                //                 ),
-                                //               ),
-                                //             ),
-                                //             const Column(
-                                //               children: [
-                                //                 Text(
-                                //                   'Stock',
-                                //                   style: TextStyle(
-                                //                     fontSize: 12,
-                                //                   ),
-                                //                 ),
-                                //                 Text(
-                                //                   'Merger',
-                                //                   style: TextStyle(
-                                //                     fontSize: 12,
-                                //                   ),
-                                //                 ),
-                                //                 Text(
-                                //                   'Approval',
-                                //                   style: TextStyle(
-                                //                     fontSize: 12,
-                                //                   ),
-                                //                 ),
-                                //               ],
-                                //             )
-                                //           ],
-                                //         ),
-                                //       ),
-                                //     ],
-                                //   ),
-                                // ),
-                                const SizedBox(
-                                  height: 30,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        //kotak putih lima (PPC approval)
-                        Visibility(
-                          visible: isVisible5,
-                          child: Container(
-                            margin: EdgeInsets.symmetric(
-                              horizontal:
-                                  size.width * 0.03, //atur lebar kotak putih
-                              vertical:
-                                  size.height * 0.02, //atur lokasi kotak putih
-                            ),
-                            constraints: const BoxConstraints(
-                              maxHeight: double.infinity,
-                            ), // atur panjang kotak putih
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: const BorderRadius.all(
-                                Radius.circular(20),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  offset: const Offset(0, 10),
-                                  blurRadius: 60,
-                                  color: Colors.grey.withOpacity(0.40),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                const SizedBox(height: 10.0),
-                                Row(
-                                  children: [
-                                    Padding(
-                                      padding: EdgeInsets.only(
-                                          left: size.width * 0.05),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: const [
-                                          Text(
-                                            'PPC Approval',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 20.0,
-                                            ),
-                                          ),
-                                          SizedBox(height: 4),
-                                          Text(
-                                            'Review and approve production work orders',
-                                            style: TextStyle(
-                                              fontSize: 12.0,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                // baris pertama
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 34, right: 24, top: 24),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceAround,
-                                    children: [
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge:
-                                                totalWoApp == 0 ? false : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalWoApp.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/woapp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalWoApp == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() => WoApp());
-                                                    // Get.to(() => WoApp());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Work Order',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Approval',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      // const SizedBox(
-                                      //   width: 20,
-                                      // ),
-                                      Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          badges.Badge(
-                                            position:
-                                                badges.BadgePosition.topEnd(
-                                                    top: -10, end: -12),
-                                            showBadge: totalWoCompleted == 0
-                                                ? false
-                                                : true,
-                                            ignorePointer: false,
-                                            badgeContent: Text(
-                                              totalWoCompleted.toString(),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10.0,
-                                              ),
-                                            ),
-                                            badgeAnimation: const badges
-                                                .BadgeAnimation.rotation(
-                                              animationDuration:
-                                                  Duration(seconds: 1),
-                                              colorChangeAnimationDuration:
-                                                  Duration(seconds: 1),
-                                              loopAnimation: false,
-                                              curve: Curves.fastOutSlowIn,
-                                              colorChangeAnimationCurve:
-                                                  Curves.easeInCubic,
-                                            ),
-                                            badgeStyle: badges.BadgeStyle(
-                                              shape: badges.BadgeShape.square,
-                                              badgeColor: Colors.red,
-                                              padding: const EdgeInsets.all(5),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              borderSide: const BorderSide(
-                                                  color: Colors.white,
-                                                  width: 2),
-                                              elevation: 0,
-                                            ),
-                                            child: Material(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                              clipBehavior:
-                                                  Clip.antiAliasWithSaveLayer,
-                                              child: Ink.image(
-                                                image: const AssetImage(
-                                                    'images/wocomp.png'),
-                                                height: size.height * 0.05,
-                                                width: size.width * 0.15,
-                                                // fit: BoxFit.fill,
-                                                child: InkWell(
-                                                  splashColor: Colors.black38,
-                                                  onTap: () async {
-                                                    totalWoCompleted == 0
-                                                        ? wakwaw()
-                                                        : Get.to(() =>
-                                                            WoCompleted());
-                                                    // Get.to(() => WoCompleted());
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const Column(
-                                            children: [
-                                              Text(
-                                                'Work Order',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Completed',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        ],
-                                      ),
-                                      Column(
-                                        //colum buat ngisi space kosong
-                                        children: [
-                                          SizedBox(
-                                            width: size.width * 0.37,
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(
-                                  height: 30,
-                                ),
-                              ],
-                            ),
-                          ),
+                        const SliverToBoxAdapter(
+                          child: SizedBox(height: 24),
                         ),
                       ],
                     ),
                   ),
-                  // Global loading overlay
-                  if (_isLoading)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withOpacity(0.20),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const CircularProgressIndicator(),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Loading approval data...',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  // Tooltip for swipe down to refresh
-                  if (showTooltip)
-                    Positioned(
-                      top: 15,
-                      left: 20,
-                      right: 20,
-                      child: AnimatedScale(
-                        scale: showTooltip ? 1.0 : 0.8,
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.elasticOut,
-                        child: AnimatedOpacity(
-                          opacity: showTooltip ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 300),
-                          child: TweenAnimationBuilder(
-                            duration: const Duration(milliseconds: 1500),
-                            tween: Tween<double>(begin: 0.95, end: 1.02),
-                            builder: (context, double scale, child) {
-                              return Transform.scale(
-                                scale: scale,
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(
-                                      horizontal: 16),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        HexColor("#F4A62A"),
-                                        HexColor("#F4A62A").withOpacity(0.9),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    borderRadius: BorderRadius.circular(25),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        offset: const Offset(0, 4),
-                                        blurRadius: 12,
-                                        color: Colors.black.withOpacity(0.15),
-                                      ),
-                                      BoxShadow(
-                                        offset: const Offset(0, 2),
-                                        blurRadius: 6,
-                                        color: HexColor("#F4A62A")
-                                            .withOpacity(0.3),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      TweenAnimationBuilder(
-                                        duration: const Duration(seconds: 2),
-                                        tween: Tween<double>(begin: 0, end: 1),
-                                        builder:
-                                            (context, double value, child) {
-                                          return Transform.rotate(
-                                            angle: value * 6.28318, // 2 * pi
-                                            child: Container(
-                                              padding: const EdgeInsets.all(6),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white
-                                                    .withOpacity(0.2),
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                              ),
-                                              child: const Icon(
-                                                Icons.refresh_rounded,
-                                                color: Colors.white,
-                                                size: 18,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                      const SizedBox(width: 12),
-                                      const Expanded(
-                                        child: Text(
-                                          'Swipe down to refresh data',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            showTooltip = false;
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                Colors.white.withOpacity(0.2),
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                          ),
-                                          child: const Icon(
-                                            Icons.close_rounded,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyCategory() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.inbox_outlined,
+              size: 48, color: Colors.grey.shade400),
+          const SizedBox(height: 12),
+          Text(
+            'Tidak ada menu pada kategori ini',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3621,9 +635,9 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   Future<void> getDataa() async {
     if (_isFetching) return;
     _isFetching = true;
-    if (mounted) {
+    if (mounted && !_hasLoadedOnce) {
       setState(() {
-        _isLoading = true;
+        _isInitialLoading = true;
       });
     }
     _timeoutTimer?.cancel();
@@ -3791,7 +805,8 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
       _isFetching = false;
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _isInitialLoading = false;
+          _hasLoadedOnce = true;
         });
       }
     }
@@ -3800,11 +815,6 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   Future<void> getDataa2() async {
     if (_isFetching) return;
     _isFetching = true;
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-      });
-    }
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(const Duration(minutes: 5), () {
       if (mounted && _isFetching) {
@@ -3815,20 +825,6 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
           text:
               'Pengambilan data melebihi 5 menit. Silakan cek koneksi atau coba lagi.',
         );
-      }
-    });
-    // Show tooltip briefly when refreshing
-    if (mounted) {
-      setState(() {
-        showTooltip = true;
-      });
-    }
-    // Hide tooltip after 3 seconds
-    Timer(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          showTooltip = false;
-        });
       }
     });
     HttpOverrides.global = MyHttpOverrides();
@@ -3983,9 +979,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
       _timeoutTimer?.cancel();
       _isFetching = false;
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() {});
       }
     }
   }

@@ -288,7 +288,7 @@ void _openApprovalDetailByType(String? type, Map<String, dynamic>? data) {
           Get.to(() => CashAdvanceApproval());
           break;
         case 'LC': // C/A Settlement Confirmation
-          Get.to(() => const CaSettleConfirm());
+          Get.to(() => CaSettleConfirm());
           break;
         case 'LA': // C/A Settlement Approval
           Get.to(() => CaSetApproval());

@@ -11,11 +11,12 @@ import 'package:intl/intl.dart';
 import 'package:liquid_pull_to_refresh/liquid_pull_to_refresh.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/BE/resD.dart';
+import 'package:v2rp3/FE/navbar/navbar.dart';
+import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:v2rp3/routes/api_name.dart';
 import '../../../../BE/controller.dart';
 import '../../../../BE/reqip.dart';
 import '../../../../main.dart';
-import '../../../navbar/navbar.dart';
 import 'wo_completed2.dart';
 
 class WoCompleted extends StatefulWidget {
@@ -418,10 +419,167 @@ class _WoCompletedState extends State<WoCompleted> {
     });
   }
 
+  void _openDetail(dynamic item) {
+    Get.to(() => WoCompleted2(
+          seckey: item['seckey'],
+          reffno: item['header']['reffno'],
+          tanggal: item['header']['tanggal'],
+          duedate: item['header']['duedate'],
+          amount: item['header']['amount'],
+          username: item['header']['username'],
+          locationname: item['header']['locationName'],
+          projectid: item['header']['projectid'],
+          description: item['header']['ket'],
+          wipacc: item['header']['wipacc'],
+          wipaccName: item['header']['wipaccName'],
+        ));
+  }
+
+  Widget _buildSearchSection() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: textControllers.WoCompletedController.value,
+            onSubmitted: (_) => _performSearch(),
+            decoration: InputDecoration(
+              hintText: 'WO No.',
+              hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+              prefixIcon:
+                  Icon(Icons.search, color: ApprovalTheme.primary, size: 20),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 0),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    BorderSide(color: ApprovalTheme.primary, width: 1.5),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: 44,
+          child: ElevatedButton(
+            onPressed: isSearching ? null : _performSearch,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ApprovalTheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+            ),
+            child: isSearching
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.search, size: 20),
+          ),
+        ),
+        const SizedBox(width: 6),
+        SizedBox(
+          height: 44,
+          child: OutlinedButton(
+            onPressed: _resetSearch,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.grey.shade700,
+              side: BorderSide(color: Colors.grey.shade300),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            child: const Icon(Icons.clear, size: 20),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildList() {
+    if (isSearching) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48),
+        child: Center(
+          child: Column(
+            children: [
+              CircularProgressIndicator(color: ApprovalTheme.primary),
+              const SizedBox(height: 16),
+              const Text('Searching...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return FutureBuilder(
+      future: dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(child: Text('Error Loading Data'));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            _foundUsers.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+              child: CircularProgressIndicator(color: ApprovalTheme.primary),
+            ),
+          );
+        }
+        if (_foundUsers.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+              child: Text('No documents found',
+                  style: TextStyle(color: Colors.grey.shade500)),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          controller: _scrollController,
+          itemCount: _foundUsers.length + (isLoadingMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index == _foundUsers.length) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: CircularProgressIndicator(color: ApprovalTheme.primary),
+                ),
+              );
+            }
+            final item = _foundUsers[index];
+            final header = item['header'];
+            return ApprovalListCard(
+              title: header['reffno']?.toString() ?? '-',
+              subtitle:
+                  "${header['username'] ?? ''} · ${DateFormat('dd MMM yyyy').format(DateTime.parse(header['tanggal']))}",
+              onTap: () => _openDetail(item),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    bool isIOS = Theme.of(context).platform == TargetPlatform.iOS;
-
     return WillPopScope(
       onWillPop: () async {
         final shouldPop = await showDialog<bool>(
@@ -441,615 +599,18 @@ class _WoCompletedState extends State<WoCompleted> {
             ],
           ),
         );
-        if (shouldPop == true) {
-          SystemNavigator.pop();
-        }
+        if (shouldPop == true) SystemNavigator.pop();
         return false;
       },
-      child: isIOS
-          ? CupertinoPageScaffold(
-              navigationBar: CupertinoNavigationBar(
-                transitionBetweenRoutes: true,
-                middle: const Text("Work Order Completed"),
-                leading: GestureDetector(
-                  child: const Icon(CupertinoIcons.back),
-                  onTap: () {
-                    Get.to(() => const Navbar());
-                  },
-                ),
-              ),
-              child: LiquidPullToRefresh(
-                onRefresh: getDataa2,
-                color: HexColor("#F4A62A"),
-                height: 140,
-                showChildOpacityTransition: false,
-                child: ListView(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: CupertinoTextField(
-                                  controller: textControllers.WoCompletedController.value,
-                                  placeholder: 'WO No.',
-                                  decoration: BoxDecoration(
-                                    color: CupertinoColors.systemGrey6,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  prefix: const Padding(
-                                    padding: EdgeInsets.only(left: 8),
-                                    child: Icon(CupertinoIcons.search, color: CupertinoColors.systemGrey),
-                                  ),
-                                  onSubmitted: (value) => _performSearch(),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              CupertinoButton(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                minSize: 0,
-                                color: isSearching ? CupertinoColors.systemGrey as Color : HexColor('#F4A62A'),
-                                onPressed: isSearching ? null : _performSearch,
-                                child: isSearching 
-                                  ? const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        SizedBox(
-                                          width: 12,
-                                          height: 12,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 1.5,
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                          ),
-                                        ),
-                                        SizedBox(width: 4),
-                                        Text('...', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                      ],
-                                    )
-                                  : const Icon(CupertinoIcons.search, color: Colors.white, size: 16),
-                              ),
-                              const SizedBox(width: 4),
-                              CupertinoButton(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                minSize: 0,
-                                color: CupertinoColors.systemGrey,
-                                onPressed: _resetSearch,
-                                child: const Icon(CupertinoIcons.clear, color: Colors.white, size: 16),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          const Divider(
-                            color: Colors.black,
-                          ),
-                          const SizedBox(height: 10),
-                          // Show search loading overlay
-                          if (isSearching)
-                            Container(
-                              height: MediaQuery.of(context).size.height * 0.6,
-                              child: const Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    CircularProgressIndicator(
-                                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF4A62A)),
-                                    ),
-                                    SizedBox(height: 16),
-                                    Text(
-                                      'Searching...',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                    SizedBox(height: 8),
-                                    Text(
-                                      'Please wait while we search for your Work Orders',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          else
-                            FutureBuilder(
-                            future: dataFuture,
-                            builder: (context, snapshot) {
-                              if (snapshot.error != null) {
-                                return const Center(
-                                  child: Text('Error Loading Data'),
-                                );
-                              }
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Center(
-                                    child: Column(
-                                  children: [
-                                    DefaultTextStyle(
-                                      style: TextStyle(
-                                        color: Colors.black,
-                                        fontSize: 20,
-                                      ),
-                                      child: Text(
-                                        'Loading...',
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      height: 20,
-                                    ),
-                                    CircularProgressIndicator(),
-                                    SizedBox(
-                                      height: 20,
-                                    ),
-                                    DefaultTextStyle(
-                                        style: TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 20,
-                                        ),
-                                        child:
-                                            Text('Please Kindly Waiting...')),
-                                  ],
-                                ));
-                              } else {
-                                return Container(
-                                  height:
-                                      MediaQuery.of(context).size.height * 0.8,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: ListView.separated(
-                                    controller: _scrollController,
-                                    // shrinkWrap: true,
-                                    separatorBuilder: (context, index) {
-                                      return SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height *
-                                                0.01,
-                                      );
-                                    },
-                                    physics: const BouncingScrollPhysics(),
-                                    itemCount: _foundUsers.length + (isLoadingMore || isSearching ? 1 : 0),
-                                    itemBuilder: (context, index) {
-                                      if (index == _foundUsers.length) {
-                                        return Center(
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(8.0),
-                                            child: Column(
-                                              children: [
-                                                const CircularProgressIndicator(),
-                                                const SizedBox(height: 8),
-                                                Text(isSearching ? 'Searching...' : 'Loading...'),
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                      return Card(
-                                        elevation: 5,
-                                        child: ListTile(
-                                          title: Text(
-                                            _foundUsers[index]['header']
-                                                ['reffno'],
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          subtitle: Text(
-                                            _foundUsers[index]['header']
-                                                    ['username'] +
-                                                " || " +
-                                                DateFormat('yyyy-MM-dd').format(
-                                                    DateTime.parse(
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['tanggal'])),
-                                          ),
-                                          onTap: () {
-                                            Get.to(() => WoCompleted2(
-                                              seckey: _foundUsers[index]
-                                                  ['seckey'],
-                                              reffno: _foundUsers[index]
-                                                  ['header']['reffno'],
-                                              tanggal: _foundUsers[index]
-                                                  ['header']['tanggal'],
-                                              duedate: _foundUsers[index]
-                                                  ['header']['duedate'],
-                                              amount: _foundUsers[index]
-                                                  ['header']['amount'],
-                                              username: _foundUsers[index]
-                                                  ['header']['username'],
-                                              locationname: _foundUsers[index]
-                                                  ['header']['locationName'],
-                                              projectid: _foundUsers[index]
-                                                  ['header']['projectid'],
-                                              description: _foundUsers[index]
-                                                  ['header']['ket'],
-                                              wipacc: _foundUsers[index]
-                                                  ['header']['wipacc'],
-                                              wipaccName: _foundUsers[index]
-                                                  ['header']['wipaccName'],
-                                            ));
-                                          },
-                                          trailing: IconButton(
-                                            icon: const Icon(Icons
-                                                .arrow_forward_ios_rounded),
-                                            onPressed: () {
-                                              Get.to(() => WoCompleted2(
-                                                seckey: _foundUsers[index]
-                                                    ['seckey'],
-                                                reffno: _foundUsers[index]
-                                                    ['header']['reffno'],
-                                                tanggal: _foundUsers[index]
-                                                    ['header']['tanggal'],
-                                                duedate: _foundUsers[index]
-                                                    ['header']['duedate'],
-                                                amount: _foundUsers[index]
-                                                    ['header']['amount'],
-                                                username: _foundUsers[index]
-                                                    ['header']['username'],
-                                                locationname: _foundUsers[index]
-                                                    ['header']['locationName'],
-                                                projectid: _foundUsers[index]
-                                                    ['header']['projectid'],
-                                                description: _foundUsers[index]
-                                                    ['header']['ket'],
-                                                wipacc: _foundUsers[index]
-                                                    ['header']['wipacc'],
-                                                wipaccName: _foundUsers[index]
-                                                    ['header']['wipaccName'],
-                                              ));
-                                            },
-                                            color: HexColor('#F4A62A'),
-                                            hoverColor: HexColor('#F4A62A'),
-                                            splashColor: HexColor('#F4A62A'),
-                                          ),
-                                          tileColor: Colors.white,
-                                          textColor: Colors.black,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : Scaffold(
-              appBar: AppBar(
-                title: const Text("Work Order Completed"),
-                centerTitle: true,
-                backgroundColor: HexColor("#F4A62A"),
-                foregroundColor: Colors.white,
-                elevation: 1,
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () {
-                    Get.to(() => const Navbar());
-                  },
-                ),
-              ),
-              body: LiquidPullToRefresh(
-                onRefresh: getDataa2,
-                color: HexColor("#F4A62A"),
-                height: 150,
-                showChildOpacityTransition: false,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: Padding(
-                    padding: const EdgeInsets.only(
-                      left: 16.0,
-                      right: 16.0,
-                      bottom: 0,
-                      top: 15.0,
-                    ),
-                    child: Column(
-                      children: [
-                        const SizedBox(
-                          height: 15,
-                        ),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: textControllers.WoCompletedController.value,
-                                onSubmitted: (value) => _performSearch(),
-                                decoration: InputDecoration(
-                                  prefixIcon: const Icon(Icons.assignment),
-                                  hintText: 'WO No.',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(5),
-                                    borderSide: const BorderSide(color: Colors.black),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            ElevatedButton(
-                              onPressed: isSearching ? null : _performSearch,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: isSearching ? Colors.grey as Color : HexColor('#F4A62A'),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                minimumSize: const Size(40, 40),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: isSearching 
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
-                                  )
-                                : const Icon(Icons.search, color: Colors.white, size: 20),
-                            ),
-                            const SizedBox(width: 4),
-                            ElevatedButton(
-                              onPressed: _resetSearch,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey,
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                minimumSize: const Size(40, 40),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: const Icon(Icons.clear, color: Colors.white, size: 20),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(
-                          height: 10,
-                        ),
-                        const Divider(
-                          color: Colors.black,
-                          thickness: 0.8,
-                          height: 25,
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Item List'),
-                            const SizedBox(height: 25.0),
-                            // Show search loading overlay for Android
-                            if (isSearching)
-                              Container(
-                                height: MediaQuery.of(context).size.height * 0.5,
-                                child: const Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      CircularProgressIndicator(
-                                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF4A62A)),
-                                      ),
-                                      SizedBox(height: 16),
-                                      Text(
-                                        'Searching...',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                      SizedBox(height: 8),
-                                      Text(
-                                        'Please wait while we search for your Work Orders',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            else
-                              FutureBuilder(
-                              future: dataFuture,
-                              builder: (context, snapshot) {
-                                if (snapshot.error != null) {
-                                  return const Center(
-                                    child: Text('Error Loading Data'),
-                                  );
-                                }
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return const Center(
-                                      child: Column(
-                                    children: [
-                                      Text('Loading...'),
-                                      SizedBox(
-                                        height: 20,
-                                      ),
-                                      CircularProgressIndicator(),
-                                      SizedBox(
-                                        height: 20,
-                                      ),
-                                      Text('Please Kindly Waiting...'),
-                                    ],
-                                  ));
-                                } else {
-                                  return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    children: [
-                                      SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height *
-                                                0.65,
-                                        child: ListView.separated(
-                                          controller: _scrollController,
-                                          // shrinkWrap: true,
-                                          separatorBuilder: (context, index) {
-                                            return SizedBox(
-                                              height: MediaQuery.of(context)
-                                                      .size
-                                                      .height *
-                                                  0.01,
-                                            );
-                                          },
-                                          physics:
-                                              const BouncingScrollPhysics(),
-                                          itemCount: _foundUsers.length + (isLoadingMore || isSearching ? 1 : 0),
-                                          itemBuilder: (context, index) {
-                                            if (index == _foundUsers.length) {
-                                              return Center(
-                                                child: Padding(
-                                                  padding: const EdgeInsets.all(8.0),
-                                                  child: Column(
-                                                    children: [
-                                                      const CircularProgressIndicator(),
-                                                      const SizedBox(height: 8),
-                                                      Text(isSearching ? 'Searching...' : 'Loading...'),
-                                                    ],
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                            return Card(
-                                              elevation: 5,
-                                              child: ListTile(
-                                                title: Text(
-                                                  _foundUsers[index]['header']
-                                                      ['reffno'],
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                                subtitle: Text(
-                                                  _foundUsers[index]['header']
-                                                          ['username'] +
-                                                      " || " +
-                                                      DateFormat('yyyy-MM-dd')
-                                                          .format(DateTime.parse(
-                                                              _foundUsers[index]
-                                                                      ['header']
-                                                                  ['tanggal'])),
-                                                ),
-                                                onTap: () {
-                                                  Get.to(() => WoCompleted2(
-                                                    seckey: _foundUsers[index]
-                                                        ['seckey'],
-                                                    reffno: _foundUsers[index]
-                                                        ['header']['reffno'],
-                                                    tanggal:
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['tanggal'],
-                                                    duedate:
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['duedate'],
-                                                    amount: _foundUsers[index]
-                                                        ['header']['amount'],
-                                                    username:
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['username'],
-                                                    locationname:
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['locationName'],
-                                                    projectid:
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['projectid'],
-                                                    description:
-                                                        _foundUsers[index]
-                                                            ['header']['ket'],
-                                                    wipacc: _foundUsers[index]
-                                                        ['header']['wipacc'],
-                                                    wipaccName:
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['wipaccName'],
-                                                  ));
-                                                },
-                                                trailing: IconButton(
-                                                  icon: const Icon(Icons
-                                                      .arrow_forward_rounded),
-                                                  onPressed: () {
-                                                    Get.to(() => WoCompleted2(
-                                                      seckey: _foundUsers[index]
-                                                          ['seckey'],
-                                                      reffno: _foundUsers[index]
-                                                          ['header']['reffno'],
-                                                      tanggal:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['tanggal'],
-                                                      duedate:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['duedate'],
-                                                      amount: _foundUsers[index]
-                                                          ['header']['amount'],
-                                                      username:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['username'],
-                                                      locationname:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['locationName'],
-                                                      projectid:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['projectid'],
-                                                      description:
-                                                          _foundUsers[index]
-                                                              ['header']['ket'],
-                                                      wipacc: _foundUsers[index]
-                                                          ['header']['wipacc'],
-                                                      wipaccName:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['wipaccName'],
-                                                    ));
-                                                  },
-                                                  color: HexColor('#F4A62A'),
-                                                  hoverColor:
-                                                      HexColor('#F4A62A'),
-                                                  splashColor:
-                                                      HexColor('#F4A62A'),
-                                                ),
-                                                tileColor: Colors.white,
-                                                textColor: Colors.black,
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+      child: ApprovalListScaffold(
+        title: 'Work Order Completed',
+        onBack: () => Get.to(const Navbar()),
+        searchController: textControllers.WoCompletedController.value,
+        onSearchChanged: (_) {},
+        searchSection: _buildSearchSection(),
+        onRefresh: getDataa2,
+        child: _buildList(),
+      ),
     );
   }
 

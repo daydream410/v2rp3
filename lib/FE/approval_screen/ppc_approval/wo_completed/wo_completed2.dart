@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
+import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/routes/api_name.dart';
 import '../../../../BE/reqip.dart';
@@ -82,12 +83,47 @@ class _WoCompleted2State extends State<WoCompleted2> {
   bool allDetailCompleted = false;
   bool isHeaderExpanded = false;
 
+  String get _formattedDate =>
+      DateFormat('dd MMM yyyy').format(DateTime.parse(widget.tanggal));
+
+  List<ApprovalInfoField> _itemDetailFields(dynamic e) {
+    return [
+      ApprovalInfoField('SPPBJ No', (e['sppbjno'] ?? e['nolpjk'] ?? e['nokasbon'] ?? '').toString()),
+      ApprovalInfoField('Date', (e['tanggal'] ?? '').toString()),
+      ApprovalInfoField('Status', (e['statusname'] ?? '').toString()),
+      ApprovalInfoField('Item / Budget', ('${e['itemcoa']} - ${e['itemname']} - ${e['ket']}').toString()),
+      ApprovalInfoField('Unit', (e['unit'] ?? '').toString()),
+      ApprovalInfoField('QTY', (e['qty'].toString())),
+      ApprovalInfoField('Price', (ApprovalTheme.currencyFmt.format(e['harga'])).toString()),
+      ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(e['amount'])).toString()),
+      ApprovalInfoField('Closing Date', ((e['completedate'] ?? '').toString()).toString()),
+    ];
+  }
+  Widget _buildBody() {
+    return FutureBuilder(
+      future: dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error Loading Data', style: TextStyle(color: Colors.grey.shade500)));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator(color: ApprovalTheme.primary));
+        }
+        return ApprovalDetailItemsColumn(
+          count: dataaa.length,
+          tableRows: [
+            for (var i = 0; i < dataaa.length; i++)
+              _itemDetailFields(dataaa[i]),
+          ],
+          children: const [],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    Size size = MediaQuery.of(context).size;
-
-    // bool isIOS = Theme.of(context).platform == TargetPlatform.iOS;
-
+    final hasAction = true;
     return WillPopScope(
       onWillPop: () async {
         final shouldPop = await showDialog<bool>(
@@ -96,963 +132,38 @@ class _WoCompleted2State extends State<WoCompleted2> {
             title: const Text('Are You sure?'),
             content: const Text('Do you want to exit V2RP Mobile?'),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('No'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Yes'),
-              ),
+              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('No')),
+              TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Yes')),
             ],
           ),
         );
-        if (shouldPop == true) {
-          SystemNavigator.pop();
-        }
+        if (shouldPop == true) SystemNavigator.pop();
         return false;
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text("Work Order Completed"),
-          centerTitle: true,
-          backgroundColor: HexColor("#F4A62A"),
-          foregroundColor: Colors.white,
-          elevation: 1,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              Get.to(() => WoCompleted());
-            },
-          ),
+      child: ApprovalDetailScaffold(
+        docNo: widget.reffno ?? '',
+        subtitle: _formattedDate,
+        onBack: () => Get.to(() => WoCompleted()),
+        infoPanel: ApprovalInfoPanel(
+          collapsedSubtitle: widget.username ?? '-',
+          fields: [
+            ApprovalInfoField('Request By', widget.username ?? '-'),
+            ApprovalInfoField('Project', widget.projectid ?? '-'),
+          ],
         ),
-        body: Padding(
-          padding: const EdgeInsets.only(
-            left: 16.0,
-            right: 16.0,
-            bottom: 0,
-            top: 5.0,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Card with See More
-              Container(
-                margin: EdgeInsets.symmetric(
-                  horizontal: size.width * 0.001,
-                  vertical: size.height * 0.02,
-                ),
-                constraints: isHeaderExpanded
-                    ? BoxConstraints(
-                        maxHeight: size.height * 0.25, // Reduced from 0.5 to 0.25
-                      )
-                    : null,
-                decoration: BoxDecoration(
-                  color: HexColor("#F4A62A"),
-                  borderRadius: const BorderRadius.all(Radius.circular(10)),
-                  boxShadow: [
-                    BoxShadow(
-                      offset: const Offset(0, 10),
-                      blurRadius: 60,
-                      color: Colors.grey.withOpacity(0.40),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min, // Add this to prevent overflow
-                  children: [
-                    const SizedBox(height: 10.0),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(left: size.width * 0.05),
-                            child: ConstrainedBox(
-                              constraints: isHeaderExpanded 
-                                  ? BoxConstraints(
-                                      maxHeight: size.height * 0.2, // Constraint for scrollable area
-                                    )
-                                  : const BoxConstraints(),
-                              child: SingleChildScrollView(
-                                physics: isHeaderExpanded
-                                    ? const AlwaysScrollableScrollPhysics()
-                                    : const NeverScrollableScrollPhysics(),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Text(
-                                          'Reff No : ',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15.0,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Expanded(
-                                          child: Text(
-                                            widget.reffno ?? "",
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15.0,
-                                              color: Colors.white,
-                                            ),
-                                            softWrap: true,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      children: [
-                                        const Text(
-                                          'Date : ',
-                                          style: TextStyle(
-                                            fontSize: 15.0,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Expanded(
-                                          child: Text(
-                                            DateFormat('yyyy-MM-dd').format(
-                                                DateTime.parse(widget.tanggal)),
-                                            style: const TextStyle(
-                                              fontSize: 15.0,
-                                              color: Colors.white,
-                                            ),
-                                            softWrap: true,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    if (isHeaderExpanded) ...[
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        children: [
-                                          const Text(
-                                            'Est. Finish Date : ',
-                                            style: TextStyle(
-                                              fontSize: 15.0,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              DateFormat('yyyy-MM-dd').format(
-                                                  DateTime.parse(widget.duedate)),
-                                              style: const TextStyle(
-                                                fontSize: 15.0,
-                                                color: Colors.white,
-                                              ),
-                                              softWrap: true,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        children: [
-                                          const Text(
-                                            'Est. Amount : ',
-                                            style: TextStyle(
-                                              fontSize: 15.0,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              NumberFormat.currency(
-                                                      locale: 'eu', symbol: '')
-                                                  .format(widget.amount),
-                                              style: const TextStyle(
-                                                fontSize: 15.0,
-                                                color: Colors.white,
-                                              ),
-                                              softWrap: true,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        children: [
-                                          const Text(
-                                            'Request By : ',
-                                            style: TextStyle(
-                                              fontSize: 15.0,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              widget.username ?? "",
-                                              style: const TextStyle(
-                                                fontSize: 15.0,
-                                                color: Colors.white,
-                                              ),
-                                              softWrap: true,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        children: [
-                                          const Text(
-                                            'Location : ',
-                                            style: TextStyle(
-                                              fontSize: 15.0,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              widget.locationname ?? "",
-                                              style: const TextStyle(
-                                                fontSize: 15.0,
-                                                color: Colors.white,
-                                              ),
-                                              softWrap: true,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        children: [
-                                          const Text(
-                                            'Project : ',
-                                            style: TextStyle(
-                                              fontSize: 15.0,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              widget.projectid ?? "",
-                                              style: const TextStyle(
-                                                fontSize: 15.0,
-                                                color: Colors.white,
-                                              ),
-                                              softWrap: true,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'WIP Account : ',
-                                            style: TextStyle(
-                                              fontSize: 15.0,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              "${widget.wipaccName} (WIP ACC No: ${widget.wipacc})",
-                                              style: const TextStyle(
-                                                fontSize: 15.0,
-                                                color: Colors.white,
-                                              ),
-                                              softWrap: true,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'Description : ',
-                                            style: TextStyle(
-                                              fontSize: 15.0,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              widget.description ?? "",
-                                              style: const TextStyle(
-                                                fontSize: 15.0,
-                                                color: Colors.white,
-                                              ),
-                                              softWrap: true,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 5),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        // See More/Less button
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8.0, top: 2.0),
-                          child: Align(
-                            alignment: Alignment.topRight,
-                            child: TextButton.icon(
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.white,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  isHeaderExpanded = !isHeaderExpanded;
-                                });
-                              },
-                              icon: Icon(
-                                  isHeaderExpanded
-                                      ? Icons.expand_less
-                                      : Icons.expand_more,
-                                  color: Colors.white),
-                              label: Text(
-                                  isHeaderExpanded ? 'See Less' : 'See More',
-                                  style: const TextStyle(color: Colors.white)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // New Card for Complete Work Order
-              Container(
-                margin: EdgeInsets.symmetric(
-                  horizontal: size.width * 0.001,
-                  vertical: size.height * 0.01,
-                ),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0, vertical: 10.0),
-                decoration: BoxDecoration(
-                  color: HexColor("#F4A62A"),
-                  borderRadius: const BorderRadius.all(Radius.circular(10)),
-                  boxShadow: [
-                    BoxShadow(
-                      offset: const Offset(0, 4),
-                      blurRadius: 20,
-                      color: Colors.grey.withOpacity(0.20),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Date Input
-                    Row(
-                      children: [
-                        const Text(
-                          "Date : ",
-                          style: TextStyle(
-                            fontSize: 14.0,
-                            color: Colors.white70,
-                          ),
-                        ),
-                        Expanded(
-                          child: SizedBox(
-                            height: 36,
-                            child: TextField(
-                              controller: fromdate.value,
-                              style: const TextStyle(
-                                  fontSize: 14, color: Colors.white),
-                              decoration: InputDecoration(
-                                contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 0, horizontal: 10),
-                                hintText: 'Select Date',
-                                hintStyle: const TextStyle(
-                                    color: Colors.white54, fontSize: 13),
-                                prefixIcon: const Icon(Icons.calendar_today,
-                                    size: 18, color: Colors.white),
-                                filled: true,
-                                fillColor: Colors.transparent,
-                                enabledBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.white24),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.white),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                              ),
-                              readOnly: true,
-                              onTap: () {
-                                selectDateFrom();
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Show type and button only if date is selected
-                    if (fromdate.value.text.isNotEmpty) ...[
-                      // Radio Buttons
-                      Row(
-                        children: [
-                          const Text(
-                            "Type : ",
-                            style: TextStyle(
-                              fontSize: 14.0,
-                              color: Colors.white70,
-                            ),
-                          ),
-                          Radio<String>(
-                            value: '1',
-                            groupValue: valueStatus,
-                            onChanged: (val) {
-                              setState(() {
-                                valueStatus = val!;
-                                valueWo =
-                                    ""; // reset dropdown when type changes
-                              });
-                            },
-                            activeColor: Colors.white,
-                          ),
-                          const Text('Capitalized',
-                              style:
-                                  TextStyle(fontSize: 13, color: Colors.white)),
-                          Radio<String>(
-                            value: '-1',
-                            groupValue: valueStatus,
-                            onChanged: (val) {
-                              setState(() {
-                                valueStatus = val!;
-                                valueWo =
-                                    ""; // reset dropdown when type changes
-                              });
-                            },
-                            activeColor: Colors.white,
-                          ),
-                          const Text('Expended',
-                              style:
-                                  TextStyle(fontSize: 13, color: Colors.white)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      // Posted to Account Dropdown (only show if Capitalized selected)
-                      if (valueStatus == '1')
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "Posted to Account : ",
-                              style: TextStyle(
-                                fontSize: 14.0,
-                                color: Colors.white70,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: DropdownButtonFormField(
-                                isExpanded: true,
-                                decoration: InputDecoration(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      vertical: 0, horizontal: 10),
-                                  filled: true,
-                                  fillColor: Colors.transparent,
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide:
-                                        BorderSide(color: Colors.white24),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(color: Colors.white),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                ),
-                                dropdownColor: HexColor("#F4A62A"),
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 13),
-                                value: valueWo.isNotEmpty ? valueWo : null,
-                                items: listWoAcc
-                                    .map<DropdownMenuItem<String>>((item) {
-                                  return DropdownMenuItem<String>(
-                                    value: item['ket'].toString(),
-                                    child: Text(
-                                      item['ket'].toString(),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      maxLines: 1,
-                                    ),
-                                  );
-                                }).toList(),
-                                onChanged: (val) {
-                                  setState(() {
-                                    valueWo = val as String;
-                                    print('Posted to Account selected: ' +
-                                        valueWo);
-                                  });
-                                },
-                                hint: const Text('Select Account',
-                                    style: TextStyle(color: Colors.white54)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      const SizedBox(height: 10),
-                      // Complete Work Order Button
-                      // Button moved to bottomNavigationBar
-                    ],
-                  ],
-                ),
-              ),
-              FutureBuilder(
-                future: dataFuture,
-                builder: (BuildContext context, AsyncSnapshot snapshot) {
-                  if (snapshot.error != null) {
-                    return const Center(
-                      child: Text('Error Loading Data'),
-                    );
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                        child: Column(
-                      children: [
-                        Text('Loading Detail...'),
-                        SizedBox(
-                          height: 20,
-                        ),
-                        CircularProgressIndicator(),
-                        SizedBox(
-                          height: 20,
-                        ),
-                        // Text('Please Kindly Waiting...'),
-                      ],
-                    ));
-                  } else {
-                    print("snapshot data " + snapshot.data.toString());
-                    if (dataaa.isEmpty) {
-                      return Expanded(
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 32),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withOpacity(0.15),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(Icons.inbox, size: 48, color: Colors.grey),
-                                SizedBox(height: 16),
-                                Text(
-                                  'No Detail',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Tidak ada data detail untuk work order ini.',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                    return Expanded(
-                      child: DataTable2(
-                        columnSpacing: 15,
-                        horizontalMargin: 12,
-                        minWidth: 1700,
-                        dataRowHeight: 70,
-                        columns: const [
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  '',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'SPPBJ No',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.M,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  '',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Date',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.S,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  '',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Status',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.S,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  '',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Item / Budget',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  '',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Unit',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.S,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  '',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'QTY',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.S,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  '',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Price',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.S,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  '',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Amount',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.S,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Closing',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Date',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.S,
-                          ),
-                        ],
-                        rows: dataaa
-                            .map((e) => DataRow(cells: [
-                                  DataCell(Text(
-                                    e['sppbjno'] ??
-                                        e['nolpjk'] ??
-                                        e['nokasbon'] ??
-                                        '',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    e['tanggal'] ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    e['statusname'] ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    '${e['itemcoa']} - ${e['itemname']} - ${e['ket']}',
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    e['unit'] ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    e['qty'].toString(),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    NumberFormat.currency(
-                                            locale: 'eu', symbol: '')
-                                        .format(e['harga']),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    NumberFormat.currency(
-                                            locale: 'eu', symbol: '')
-                                        .format(e['amount']),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    (e['completedate'] ?? '').toString(),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                ]))
-                            .toList(),
-                      ),
-                    );
-                  }
-                },
-              ),
-              const SizedBox(
-                height: 20,
-              ),
-              FutureBuilder(
-                future: dataFuture,
-                builder: (BuildContext context, AsyncSnapshot snapshot) {
-                  if (snapshot.error != null) {
-                    return const Center(
-                      child: Text('Error Loading Data'),
-                    );
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                        child: Column(
-                      children: [
-                        SizedBox(
-                          height: 20,
-                        ),
-                        Text('Please Kindly Waiting...'),
-                      ],
-                    ));
-                  } else {
-                    if (dataaa.isEmpty) {
-                      return const SizedBox.shrink();
-                    }
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        const Text(
-                          'TOTAL = ',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          NumberFormat.currency(locale: 'eu', symbol: '')
-                              .format(totalPrice),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-        bottomNavigationBar: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Obx(() {
-            // Only show if date sudah dipilih
-            if (fromdate.value.text.isNotEmpty) {
-              // Button enable conditions:
-              // 1. Type sudah dipilih dan semua detail Completed
-              // 2. Type Expended (-1) dan tidak ada data detail
-              bool enableButton = valueStatus.isNotEmpty && 
-                  (allDetailCompleted || (valueStatus == '-1' && dataaa.isEmpty));
-              print("Debug button enable conditions:");
-              print("Date selected: ${fromdate.value.text.isNotEmpty}");
-              print("Type selected: ${valueStatus.isNotEmpty} (value: $valueStatus)");
-              print("All detail completed: $allDetailCompleted");
-              print("Data is empty: ${dataaa.isEmpty}");
-              print("Is Expended with no data: ${valueStatus == '-1' && dataaa.isEmpty}");
-              print("Button enabled: $enableButton");
-              return SizedBox(
-                width: double.infinity,
-                height: 40,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: HexColor("#F4A62A"),
-                    textStyle: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 13),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: enableButton
-                      ? () {
-                          if (valueStatus == '1') {
-                            // Capitalized: posted to account harus dipilih
-                            if (valueWo.isEmpty) {
-                              QuickAlert.show(
-                                context: context,
-                                type: QuickAlertType.warning,
-                                title: 'Peringatan',
-                                text:
-                                    'Pilih Posted to Account terlebih dahulu!',
-                              );
-                            } else {
-                              sendConfirm();
-                            }
-                          } else {
-                            sendConfirm();
-                          }
-                        }
-                      : null,
-                  child: const Text('Complete Work Order'),
-                ),
-              );
-            } else {
-              return const SizedBox.shrink();
-            }
-          }),
+        actionSection: null,
+        body: _buildBody(),
+        bottomBar: ApprovalDetailBottomBar(
+          totalPrice: totalPrice, itemCount: dataaa.length,
+          selectedAction: hasAction ? 'Submit' : null,
+          actionColor: hasAction ? ApprovalTheme.primary : null,
+          idleHint: 'Tap submit to continue',
+          onSubmit: () { sendConfirm(); },
         ),
       ),
     );
   }
+
 
   Future<dynamic> getDataa() async {
     HttpOverrides.global = MyHttpOverrides();
@@ -1072,7 +183,11 @@ class _WoCompleted2State extends State<WoCompleted2> {
         },
       );
       final caConfirmData = json.decode(getData.body);
-      dataaa = caConfirmData['data']['detail'];
+      final _data = caConfirmData['data'];
+      if (_data is Map && _data['header'] is Map) {
+      }
+      final details = caConfirmData['data']['detail'];
+      if (mounted) { setState(() => dataaa = details); } else { dataaa = details; }
       print("totalllll  " + totalPrice.toString());
       print("dataaa " + dataaa.toString());
 
@@ -1118,6 +233,7 @@ class _WoCompleted2State extends State<WoCompleted2> {
       setState(() {
         allDetailCompleted = allCompleted;
       });
+      if (mounted) setState(() {});
       return dataaa;
     } catch (e) {
       print(e);

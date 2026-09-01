@@ -1,23 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:v2rp3/utils/hex_color.dart';
 import 'package:intl/intl.dart';
-import 'package:liquid_pull_to_refresh/liquid_pull_to_refresh.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:v2rp3/FE/approval_screen/purchase_approval/np_app/newap_app2.dart';
+import 'package:v2rp3/FE/shared/approval_ui.dart';
+import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/routes/api_name.dart';
-
-import '../../../../BE/controller.dart';
-import '../../../../BE/reqip.dart';
-import '../../../../BE/resD.dart';
-import '../../../../main.dart';
-import '../../../navbar/navbar.dart';
+import '../../../../../BE/controller.dart';
+import '../../../../../BE/reqip.dart';
+import '../../../../../BE/resD.dart';
+import '../../../../../main.dart';
+import 'package:v2rp3/FE/approval_screen/purchase_approval/np_app/newap_app2.dart';
 
 class NpApp extends StatefulWidget {
   NpApp({Key? key}) : super(key: key);
@@ -28,7 +24,6 @@ class NpApp extends StatefulWidget {
 
 class _NpAppState extends State<NpApp> {
   static TextControllers textControllers = Get.put(TextControllers());
-
   static late List dataaa = <CaConfirmData>[];
   static late List _foundUsers = <CaConfirmData>[];
   late Future dataFuture;
@@ -45,20 +40,80 @@ class _NpAppState extends State<NpApp> {
       results = dataaa;
     } else {
       results = dataaa
-          .where((dataaa) => dataaa['header']['reffno']
+          .where((item) => item['header']['reffno']
               .toLowerCase()
               .contains(enteredKeyword.toLowerCase()))
           .toList();
     }
-    setState(() {
-      _foundUsers = results;
-    });
+    setState(() => _foundUsers = results);
+  }
+
+  void _openDetail(dynamic item) {
+    Get.to(() => NpApp2(
+                                              seckey: item
+                                                  ['seckey'],
+                                              reffno: item
+                                                  ['header']['reffno'],
+                                              ket: item['header']
+                                                  ['reason'],
+                                              tanggal: item
+                                                  ['header']['tanggal'],
+                                              supplier: item
+                                                  ['header']['supplier_name'],
+                                              invdate: item
+                                                  ['header']['invdate'],
+                                              ccy: item['header']
+                                                  ['ccy'],
+                                              duedate: item
+                                                  ['header']['duedate'],
+                                              amount: item
+                                                  ['header']['amount'],
+                                              inIDR: item
+                                                  ['header']['amountidr'],
+                                            ));
+  }
+
+  Widget _buildList() {
+    return FutureBuilder(
+      future: dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(child: Text('Error Loading Data'));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+              child: CircularProgressIndicator(color: ApprovalTheme.primary),
+            ),
+          );
+        }
+        if (_foundUsers.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+              child: Text('No documents found',
+                  style: TextStyle(color: Colors.grey.shade500)),
+            ),
+          );
+        }
+        return Column(
+          children: _foundUsers.map<Widget>((item) {
+            final header = item['header'];
+            return ApprovalListCard(
+              title: header['reffno']?.toString() ?? '-',
+              subtitle:
+                  "${header['requestorname'] ?? ''} · ${DateFormat('dd MMM yyyy').format(DateTime.parse(header['tanggal']))}",
+              onTap: () => _openDetail(item),
+            );
+          }).toList(),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isIOS = Theme.of(context).platform == TargetPlatform.iOS;
-
     return WillPopScope(
       onWillPop: () async {
         final shouldPop = await showDialog<bool>(
@@ -78,419 +133,17 @@ class _NpAppState extends State<NpApp> {
             ],
           ),
         );
-        if (shouldPop == true) {
-          SystemNavigator.pop();
-        }
+        if (shouldPop == true) SystemNavigator.pop();
         return false;
       },
-      child: isIOS
-          ? CupertinoPageScaffold(
-              navigationBar: CupertinoNavigationBar(
-                transitionBetweenRoutes: true,
-                middle: const Text("New Payable Approval"),
-                leading: GestureDetector(
-                  child: const Icon(CupertinoIcons.back),
-                  onTap: () {
-                    Get.to(const Navbar());
-                  },
-                ),
-              ),
-              child: LiquidPullToRefresh(
-                onRefresh: getDataa2,
-                color: HexColor("#F4A62A"),
-                height: 140,
-                showChildOpacityTransition: false,
-                child: ListView(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          CupertinoSearchTextField(
-                            controller:
-                                textControllers.newapAppController.value,
-                            onChanged: (value) => _runFilter(value),
-                            itemSize: 30,
-                            itemColor: HexColor('#F4A62A'),
-                            prefixInsets:
-                                const EdgeInsets.only(left: 8, right: 8),
-                            suffixInsets: const EdgeInsets.only(right: 8),
-                          ),
-                          const SizedBox(height: 10),
-                          const Divider(
-                            color: Colors.black,
-                          ),
-                          const SizedBox(height: 10),
-                          FutureBuilder(
-                            future: dataFuture,
-                            builder: (context, snapshot) {
-                              if (snapshot.error != null) {
-                                return const Center(
-                                  child: Text('Error Loading Data'),
-                                );
-                              }
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Center(
-                                    child: Column(
-                                  children: [
-                                    DefaultTextStyle(
-                                      style: TextStyle(
-                                        color: Colors.black,
-                                        fontSize: 20,
-                                      ),
-                                      child: Text(
-                                        'Loading...',
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      height: 20,
-                                    ),
-                                    CircularProgressIndicator(),
-                                    SizedBox(
-                                      height: 20,
-                                    ),
-                                    DefaultTextStyle(
-                                        style: TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 20,
-                                        ),
-                                        child:
-                                            Text('Please Kindly Waiting...')),
-                                  ],
-                                ));
-                              } else {
-                                return Container(
-                                  height:
-                                      MediaQuery.of(context).size.height * 0.8,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: ListView.separated(
-                                    // shrinkWrap: true,
-                                    separatorBuilder: (context, index) {
-                                      return SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height *
-                                                0.01,
-                                      );
-                                    },
-                                    physics: const ClampingScrollPhysics(),
-                                    itemCount: _foundUsers.length,
-                                    itemBuilder: (context, index) {
-                                      return Card(
-                                        elevation: 5,
-                                        child: ListTile(
-                                          title: Text(
-                                            _foundUsers[index]['header']
-                                                ['reffno'],
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          subtitle: Text(
-                                            _foundUsers[index]['header']
-                                                    ['requestor'] +
-                                                " || " +
-                                                DateFormat('yyyy-MM-dd').format(
-                                                    DateTime.parse(
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['tanggal'])),
-                                          ),
-                                          onTap: () {
-                                            Get.to(() => NpApp2(
-                                              seckey: _foundUsers[index]
-                                                  ['seckey'],
-                                              reffno: _foundUsers[index]
-                                                  ['header']['reffno'],
-                                              ket: _foundUsers[index]['header']
-                                                  ['reason'],
-                                              tanggal: _foundUsers[index]
-                                                  ['header']['tanggal'],
-                                              supplier: _foundUsers[index]
-                                                  ['header']['supplier_name'],
-                                              invdate: _foundUsers[index]
-                                                  ['header']['invdate'],
-                                              ccy: _foundUsers[index]['header']
-                                                  ['ccy'],
-                                              duedate: _foundUsers[index]
-                                                  ['header']['duedate'],
-                                              amount: _foundUsers[index]
-                                                  ['header']['amount'],
-                                              inIDR: _foundUsers[index]
-                                                  ['header']['amountidr'],
-                                            ));
-                                          },
-                                          trailing: IconButton(
-                                            icon: const Icon(Icons
-                                                .arrow_forward_ios_rounded),
-                                            onPressed: () {
-                                              Get.to(() => NpApp2(
-                                                seckey: _foundUsers[index]
-                                                    ['seckey'],
-                                                reffno: _foundUsers[index]
-                                                    ['header']['reffno'],
-                                                ket: _foundUsers[index]
-                                                    ['header']['reason'],
-                                                tanggal: _foundUsers[index]
-                                                    ['header']['tanggal'],
-                                                supplier: _foundUsers[index]
-                                                    ['header']['supplier_name'],
-                                                invdate: _foundUsers[index]
-                                                    ['header']['invdate'],
-                                                ccy: _foundUsers[index]
-                                                    ['header']['ccy'],
-                                                duedate: _foundUsers[index]
-                                                    ['header']['duedate'],
-                                                amount: _foundUsers[index]
-                                                    ['header']['amount'],
-                                                inIDR: _foundUsers[index]
-                                                    ['header']['amountidr'],
-                                              ));
-                                            },
-                                            color: HexColor('#F4A62A'),
-                                            hoverColor: HexColor('#F4A62A'),
-                                            splashColor: HexColor('#F4A62A'),
-                                          ),
-                                          tileColor: Colors.white,
-                                          textColor: Colors.black,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : Scaffold(
-              appBar: AppBar(
-                title: const Text("New Payable Approval"),
-                centerTitle: true,
-                backgroundColor: HexColor("#F4A62A"),
-                foregroundColor: Colors.white,
-                elevation: 1,
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () {
-                    Get.to(() => const Navbar());
-                  },
-                ),
-              ),
-              body: LiquidPullToRefresh(
-                onRefresh: getDataa2,
-                color: HexColor("#F4A62A"),
-                height: 150,
-                showChildOpacityTransition: false,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: Padding(
-                    padding: const EdgeInsets.only(
-                      left: 16.0,
-                      right: 16.0,
-                      bottom: 0,
-                      top: 15.0,
-                    ),
-                    child: Column(
-                      children: [
-                        const SizedBox(
-                          height: 15,
-                        ),
-                        TextField(
-                          controller: textControllers.newapAppController.value,
-                          onChanged: (value) => _runFilter(value),
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.assignment),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.search),
-                              color: HexColor('#F4A62A'),
-                              onPressed: () async {},
-                              splashColor: HexColor('#F4A62A'),
-                              tooltip: 'Search',
-                              hoverColor: HexColor('#F4A62A'),
-                            ),
-                            hintText: 'Invoice No.',
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(5),
-                                borderSide:
-                                    const BorderSide(color: Colors.black)),
-                          ),
-                        ),
-                        const SizedBox(
-                          height: 10,
-                        ),
-                        const Divider(
-                          color: Colors.black,
-                          thickness: 0.8,
-                          height: 25,
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Item List'),
-                            const SizedBox(height: 25.0),
-                            FutureBuilder(
-                              future: dataFuture,
-                              builder: (context, snapshot) {
-                                if (snapshot.error != null) {
-                                  return const Center(
-                                    child: Text('Error Loading Data'),
-                                  );
-                                }
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return const Center(
-                                      child: Column(
-                                    children: [
-                                      Text('Loading...'),
-                                      SizedBox(
-                                        height: 20,
-                                      ),
-                                      CircularProgressIndicator(),
-                                      SizedBox(
-                                        height: 20,
-                                      ),
-                                      Text('Please Kindly Waiting...'),
-                                    ],
-                                  ));
-                                } else {
-                                  return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    children: [
-                                      SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height *
-                                                0.65,
-                                        child: ListView.separated(
-                                          // shrinkWrap: true,
-                                          separatorBuilder: (context, index) {
-                                            return SizedBox(
-                                              height: MediaQuery.of(context)
-                                                      .size
-                                                      .height *
-                                                  0.01,
-                                            );
-                                          },
-                                          physics:
-                                              const ClampingScrollPhysics(),
-                                          itemCount: _foundUsers.length,
-                                          itemBuilder: (context, index) {
-                                            return Card(
-                                              elevation: 5,
-                                              child: ListTile(
-                                                title: Text(
-                                                  _foundUsers[index]['header']
-                                                      ['reffno'],
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                                subtitle: Text(
-                                                  _foundUsers[index]['header']
-                                                          ['requestor'] +
-                                                      " || " +
-                                                      DateFormat('yyyy-MM-dd')
-                                                          .format(DateTime.parse(
-                                                              _foundUsers[index]
-                                                                      ['header']
-                                                                  ['tanggal'])),
-                                                ),
-                                                onTap: () {
-                                                  Get.to(() => NpApp2(
-                                                    seckey: _foundUsers[index]
-                                                        ['seckey'],
-                                                    reffno: _foundUsers[index]
-                                                        ['header']['reffno'],
-                                                    ket: _foundUsers[index]
-                                                        ['header']['reason'],
-                                                    tanggal: _foundUsers[index]
-                                                        ['header']['tanggal'],
-                                                    supplier: _foundUsers[index]
-                                                            ['header']
-                                                        ['supplier_name'],
-                                                    invdate: _foundUsers[index]
-                                                        ['header']['invdate'],
-                                                    ccy: _foundUsers[index]
-                                                        ['header']['ccy'],
-                                                    duedate: _foundUsers[index]
-                                                        ['header']['duedate'],
-                                                    amount: _foundUsers[index]
-                                                        ['header']['amount'],
-                                                    inIDR: _foundUsers[index]
-                                                        ['header']['amountidr'],
-                                                  ));
-                                                },
-                                                trailing: IconButton(
-                                                  icon: const Icon(Icons
-                                                      .arrow_forward_rounded),
-                                                  onPressed: () {
-                                                    Get.to(() => NpApp2(
-                                                      seckey: _foundUsers[index]
-                                                          ['seckey'],
-                                                      reffno: _foundUsers[index]
-                                                          ['header']['reffno'],
-                                                      ket: _foundUsers[index]
-                                                          ['header']['reason'],
-                                                      tanggal:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['tanggal'],
-                                                      supplier:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['supplier_name'],
-                                                      invdate:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['invdate'],
-                                                      ccy: _foundUsers[index]
-                                                          ['header']['ccy'],
-                                                      duedate:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['duedate'],
-                                                      amount: _foundUsers[index]
-                                                          ['header']['amount'],
-                                                      inIDR: _foundUsers[index]
-                                                              ['header']
-                                                          ['amountidr'],
-                                                    ));
-                                                  },
-                                                  color: HexColor('#F4A62A'),
-                                                  hoverColor:
-                                                      HexColor('#F4A62A'),
-                                                  splashColor:
-                                                      HexColor('#F4A62A'),
-                                                ),
-                                                tileColor: Colors.white,
-                                                textColor: Colors.black,
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+      child: ApprovalListScaffold(
+        title: 'New Payable Approval',
+        onBack: () => Get.to(const Navbar()),
+        searchController: textControllers.newapAppController.value,
+        onSearchChanged: _runFilter,
+        onRefresh: getDataa2,
+        child: _buildList(),
+      ),
     );
   }
 
@@ -526,7 +179,6 @@ class _NpAppState extends State<NpApp> {
       print(e);
     }
   }
-
   Future<void> getDataa2() async {
     HttpOverrides.global = MyHttpOverrides();
     final SharedPreferences sharedPreferences =

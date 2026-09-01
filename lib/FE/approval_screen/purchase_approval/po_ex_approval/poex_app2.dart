@@ -14,6 +14,7 @@ import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/FE/approval_screen/purchase_approval/po_ex_approval/poex_app.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
+import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/BE/controller.dart';
 
@@ -62,17 +63,84 @@ class _PoExApp2State extends State<PoExApp2> {
     dataFuture = getDataa();
   }
 
-  // String dTax = '';
-  String reasonValue = '';
   static TextControllers textControllers = Get.put(TextControllers());
   List selectedDetails = [];
   bool selectedGak = false;
   double totalPrice = 0;
   var valueButton;
+  String reasonValue = '';
+  String _selectionAction = '';
+  static const _selectionActions = [
+    ApprovalActionMeta(label: 'Send To Draft (ALL)', icon: Icons.edit_note_outlined, color: Color(0xFFFF9800)),
+  ];
+
+  String get _formattedDate =>
+      DateFormat('dd MMM yyyy').format(DateTime.parse(widget.tanggal));
+
+  void _onSelectionAction(String label) {
+    setState(() {
+      _selectionAction = label;
+      if (label == 'Send To Draft (ALL)') valueButton = '-9';
+    });
+  }
+  List<ApprovalInfoField> _itemDetailFields(dynamic e) {
+    return [
+      ApprovalInfoField('SPPBJ No', (e['sppbjno'] ?? '').toString()),
+      ApprovalInfoField('Item COA', (e['itemcoa'] ?? '').toString()),
+      ApprovalInfoField('Item Name', (e['itemname'] ?? '').toString()),
+      ApprovalInfoField('Remarks', (e['ket'] ?? '').toString()),
+      ApprovalInfoField('Unit', (e['unit'].toString())),
+      ApprovalInfoField('QTY', (e['qty'].toString())),
+      ApprovalInfoField('Price', (ApprovalTheme.currencyFmt.format(double.parse(e['harga']))).toString()),
+      ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(double.parse(e['amount']))).toString()),
+      ApprovalInfoField('Disc', ('${double.parse(e['disc']) / 100}%').toString()),
+      ApprovalInfoField('Tax', (ApprovalTheme.currencyFmt.format(double.parse( e['taxAmount'].toString())))),
+      ApprovalInfoField('Total', (ApprovalTheme.currencyFmt.format(double.parse(e['qty']) * double.parse(e['harga']) + double.parse( e['taxAmount'].toString())))),
+    ];
+  }
+  Widget _buildBody() {
+    return FutureBuilder(
+      future: dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error Loading Data', style: TextStyle(color: Colors.grey.shade500)));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator(color: ApprovalTheme.primary));
+        }
+                return ApprovalDetailItemsColumn(
+          count: dataaa.length,
+          selectable: true,
+          isRowSelected: (i) =>
+              selectedDetails.contains(dataaa[i]['urutan']),
+          onRowSelectionChanged: (i, v) {
+            setState(() {
+              final id = dataaa[i]['urutan'];
+              if (v == true) {
+                selectedDetails.add(id);
+                selectedGak = true;
+              } else {
+                selectedDetails.remove(id);
+                if (selectedDetails.isEmpty) {
+                  selectedGak = false;
+                  _selectionAction = '';
+                }
+              }
+            });
+          },
+          tableRows: [
+            for (var i = 0; i < dataaa.length; i++)
+              _itemDetailFields(dataaa[i]),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    Size size = MediaQuery.of(context).size;
-
+    final hasSelection = selectedGak;
+    final displayAction = _selectionAction.isNotEmpty ? _selectionAction : 'Approve All';
     return WillPopScope(
       onWillPop: () async {
         final shouldPop = await showDialog<bool>(
@@ -81,659 +149,45 @@ class _PoExApp2State extends State<PoExApp2> {
             title: const Text('Are You sure?'),
             content: const Text('Do you want to exit V2RP Mobile?'),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('No'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Yes'),
-              ),
+              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('No')),
+              TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Yes')),
             ],
           ),
         );
-        if (shouldPop == true) {
-          SystemNavigator.pop();
-        }
+        if (shouldPop == true) SystemNavigator.pop();
         return false;
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text("PO Exception Approval"),
-          centerTitle: true,
-          backgroundColor: HexColor("#F4A62A"),
-          foregroundColor: Colors.white,
-          elevation: 1,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              Get.to(() => PoExApp());
-            },
-          ),
+      child: ApprovalDetailScaffold(
+        docNo: widget.pono ?? '',
+        subtitle: _formattedDate,
+        onBack: () => Get.to(() => PoExApp()),
+        infoPanel: ApprovalInfoPanel(
+          collapsedSubtitle: widget.requestor ?? '-',
+          fields: [
+            ApprovalInfoField('Project', widget.projectid ?? '-'),
+            ApprovalInfoField('Request By', widget.requestor ?? '-'),
+          ],
         ),
-        body: Padding(
-          padding: const EdgeInsets.only(
-            left: 16.0,
-            right: 16.0,
-            bottom: 0,
-            top: 5.0,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                margin: EdgeInsets.symmetric(
-                  horizontal: size.width * 0.001, //atur lebar kotak putih
-                  vertical: size.height * 0.02, //atur lokasi kotak putih
-                ),
-                height: size.height * 0.25, //atur panjang kotak putih
-                decoration: BoxDecoration(
-                  color: HexColor("#F4A62A"),
-                  borderRadius: const BorderRadius.all(
-                    Radius.circular(10),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      offset: const Offset(0, 10),
-                      blurRadius: 60,
-                      color: Colors.grey.withOpacity(0.40),
-                    ),
-                  ],
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 10.0),
-                      Row(
-                        children: [
-                          Padding(
-                            padding: EdgeInsets.only(left: size.width * 0.05),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'PO No : ',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.pono ?? "",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Date : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      DateFormat('yyyy-MM-dd').format(
-                                          DateTime.parse(widget.tanggal)),
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Request By : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.requestor ?? "",
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Project ID : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.projectid ?? "",
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Item COA : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.itemcoa ?? "",
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'SPPBJ Amount : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      NumberFormat.currency(
-                                              locale: 'eu', symbol: '')
-                                          .format(widget.sppbjamount),
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'PO Amount : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      NumberFormat.currency(
-                                              locale: 'eu', symbol: '')
-                                          .format(widget.poamount),
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Different : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      NumberFormat.currency(
-                                              locale: 'eu', symbol: '')
-                                          .format(widget.different),
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Avail Budget : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      NumberFormat.currency(
-                                              locale: 'eu', symbol: '')
-                                          .format(widget.budgetavailable),
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Visibility(
-                visible: selectedGak,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ButtonStyle(
-                          backgroundColor: MaterialStateProperty.all(
-                            HexColor("#F4A62A"),
-                          ),
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            valueButton = '-9';
-                          });
-                          print("value button " + valueButton);
-                          // submitData();
-                          reason();
-                        },
-                        child: const Text(
-                          'Send To Draft (ALL)',
-                          style: TextStyle(
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              FutureBuilder(
-                future: dataFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.error != null) {
-                    return const Center(
-                      child: Text('Error Loading Data'),
-                    );
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                        child: Column(
-                      children: [
-                        Text('Loading Detail...'),
-                        SizedBox(
-                          height: 20,
-                        ),
-                        CircularProgressIndicator(),
-                        SizedBox(
-                          height: 20,
-                        ),
-                        Text('Please Kindly Waiting...'),
-                      ],
-                    ));
-                  } else {
-                    return Expanded(
-                      child: DataTable2(
-                        columnSpacing: 12,
-                        horizontalMargin: 12,
-                        minWidth: 1400,
-                        dataRowHeight: 100,
-                        columns: const [
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'SPPBJ',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'No',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Item',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'COA',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Item',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Name',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Remarks',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Unit',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.S,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'QTY',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.S,
-                          ),
-                          DataColumn(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Price',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Amount',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.M,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Disc',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.M,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Tax',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.M,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Total',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.L,
-                          ),
-                        ],
-                        rows: dataaa
-                            .map((e) => DataRow2(
-                                    selected:
-                                        selectedDetails.contains(e["urutan"]),
-                                    onSelectChanged: (isSelected) {
-                                      setState(() {
-                                        final isAdding =
-                                            isSelected != null && isSelected;
-                                        isAdding
-                                            ? selectedDetails.add(e["urutan"])
-                                            : selectedDetails
-                                                .remove(e["urutan"]);
-                                        if (isSelected != null) {
-                                          selectedGak = true;
-                                        }
-                                      });
-                                    },
-                                    cells: [
-                                      DataCell(Text(
-                                        e['sppbjno'] ?? '',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['itemcoa'] ?? '',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['itemname'] ?? '',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['ket'] ?? '',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['unit'].toString(),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['qty'].toString(),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        NumberFormat.currency(
-                                                locale: 'eu', symbol: '')
-                                            .format(double.parse(e['harga'])),
-                                        // e['harga'].toString(),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        NumberFormat.currency(
-                                                locale: 'eu', symbol: '')
-                                            .format(double.parse(e['amount'])),
-                                        // e['amount'].toString(),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        NumberFormat.currency(
-                                                locale: 'eu', symbol: '%')
-                                            .format(
-                                                double.parse(e['disc']) / 100),
-                                        // e['disc'].toString(),
-                                        // e['disc'].substring(0, 4),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        NumberFormat.currency(
-                                                locale: 'eu', symbol: '')
-                                            .format(double.parse(
-                                                e['taxAmount'].toString())),
-                                        // e['tax'],
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        NumberFormat.currency(
-                                                locale: 'eu', symbol: '')
-                                            .format(double.parse(e['qty']) *
-                                                    double.parse(e['harga']) +
-                                                double.parse(
-                                                    e['taxAmount'].toString())),
-                                        // e['amount'].toString(),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                    ]))
-                            .toList(),
-                      ),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-        bottomNavigationBar: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Visibility(
-            visible: selectedGak,
-            child: TextButton(
-              child: const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text('A P P R O V E   A L L'),
-              ),
-              onPressed: () async {
-                setState(() {
-                  valueButton = '1';
-                });
-                print("value button " + valueButton);
-                submitData();
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: HexColor("#F4A62A"),
-              ),
-            ),
-          ),
+        actionSection: hasSelection ? ApprovalActionGrid(
+          actions: _selectionActions, selectedLabel: _selectionAction, onSelected: _onSelectionAction,
+        ) : null,
+        body: _buildBody(),
+        bottomBar: ApprovalDetailBottomBar(
+          totalPrice: totalPrice, itemCount: dataaa.length,
+          selectedAction: hasSelection ? displayAction : null,
+          actionColor: hasSelection ? (_selectionAction.isNotEmpty
+              ? ApprovalActions.colorFor(_selectionAction, _selectionActions) : ApprovalTheme.primary) : null,
+          submitLabel: _selectionAction.isNotEmpty ? 'Submit' : 'Approve All',
+          idleHint: 'Select items to continue',
+          onSubmit: hasSelection ? () {
+            if (_selectionAction.contains('Draft') || _selectionAction.contains('Reject')) reason();
+            else { setState(() => valueButton = '1'); submitData(); }
+          } : null,
         ),
       ),
     );
   }
+
 
   Future<dynamic> getDataa() async {
     HttpOverrides.global = MyHttpOverrides();
@@ -757,6 +211,9 @@ class _PoExApp2State extends State<PoExApp2> {
         },
       );
       final caConfirmData = json.decode(getData.body);
+      final _data = caConfirmData['data'];
+      if (_data is Map && _data['header'] is Map) {
+      }
       print("response " + caConfirmData.toString());
       dataaa = caConfirmData['data']['details'];
       print("dataaa " + dataaa.toString());
@@ -775,7 +232,14 @@ class _PoExApp2State extends State<PoExApp2> {
         dataaa = caConfirmData['data']['details'];
         print("dataaa " + dataaa.toString());
       }
+      var total = 0.0;
+      for (var item in dataaa) {
+        final amount = item['amount'];
+        if (amount != null) total += (amount as num).toDouble();
+      }
+      totalPrice = total;
       // print(dTax);
+      if (mounted) setState(() {});
       return dataaa;
     } catch (e) {
       print(e);

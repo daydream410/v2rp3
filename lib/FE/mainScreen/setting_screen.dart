@@ -9,6 +9,8 @@ import 'package:v2rp3/utils/hex_color.dart';
 import 'package:http/http.dart' as http;
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:v2rp3/FE/shared/approval_menu_ui.dart';
 import 'package:v2rp3/FE/mainScreen/login_screen4.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/main.dart' show getAndSaveFcmToken;
@@ -21,6 +23,7 @@ class SettingScreen extends StatefulWidget {
 }
 
 class _SettingScreenState extends State<SettingScreen> {
+  final RefreshController _refreshController = RefreshController();
   String? finalEmail = '';
   String? finalUsername = '';
   bool _isLoading = true;
@@ -114,10 +117,32 @@ class _SettingScreenState extends State<SettingScreen> {
   }
 
   @override
+  void dispose() {
+    _refreshController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onPullRefresh() async {
+    final started = DateTime.now();
+    try {
+      await fetchProfile();
+      await getEmail();
+    } finally {
+      final elapsed = DateTime.now().difference(started);
+      const minDuration = Duration(milliseconds: 900);
+      if (elapsed < minDuration) {
+        await Future.delayed(minDuration - elapsed);
+      }
+      if (mounted) {
+        _refreshController.refreshCompleted();
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    Size size = MediaQuery.of(context).size;
-    bool isTablet = size.width > 600;
-    double responsivePadding = isTablet ? 32.0 : 16.0;
+    final size = MediaQuery.of(context).size;
+    final isTablet = size.width > 600;
 
     return WillPopScope(
       onWillPop: () async {
@@ -144,423 +169,489 @@ class _SettingScreenState extends State<SettingScreen> {
         return false;
       },
       child: Scaffold(
-        backgroundColor: Colors.grey[100],
-        body: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: fetchProfile,
-            color: HexColor("#F4A62A"),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Padding(
-                padding: EdgeInsets.all(responsivePadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    SizedBox(height: size.height * 0.02),
-                    // Profile Header Card
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            HexColor("#F4A62A"),
-                            HexColor("#F4A62A").withOpacity(0.8),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: HexColor("#F4A62A").withOpacity(0.3),
-                            blurRadius: 15,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.all(isTablet ? 32.0 : 24.0),
-                        child: Column(
-                          children: [
-                            // Profile Picture
-                            Container(
-                              width: isTablet ? 120.0 : 100.0,
-                              height: isTablet ? 120.0 : 100.0,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 4,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.2),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
-                              ),
-                              child: ClipOval(
-                                child: Image.asset(
-                                  'images/pp.png',
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      color: Colors.white,
-                                      child: Icon(
-                                        Icons.person,
-                                        size: isTablet ? 60.0 : 50.0,
-                                        color: HexColor("#F4A62A"),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: isTablet ? 20.0 : 16.0),
-                            // Email
-                            if (finalEmail != null && finalEmail!.isNotEmpty)
-                              Text(
-                                finalEmail!,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: isTablet ? 20.0 : 18.0,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            SizedBox(height: isTablet ? 12.0 : 8.0),
-                            // Username
-                            if (finalUsername != null &&
-                                finalUsername!.isNotEmpty)
-                              Text(
-                                finalUsername!,
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.9),
-                                  fontSize: isTablet ? 16.0 : 14.0,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: size.height * 0.03),
-                    // Profile Information Card
-                    if (_isLoading)
-                      Container(
-                        padding: EdgeInsets.all(40),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              HexColor("#F4A62A"),
-                            ),
-                          ),
-                        ),
-                      )
-                    else if (_errorMessage != null)
-                      Container(
-                        padding: EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.red[50],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.red[200]!),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              color: Colors.red,
-                              size: 40,
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              _errorMessage!,
-                              style: TextStyle(
-                                color: Colors.red[900],
-                                fontSize: 14,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: fetchProfile,
-                              icon: Icon(Icons.refresh),
-                              label: Text('Retry'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: HexColor("#F4A62A"),
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else if (_profileData != null)
-                      Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(isTablet ? 24.0 : 20.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.person_outline,
-                                    color: HexColor("#F4A62A"),
-                                    size: isTablet ? 28.0 : 24.0,
-                                  ),
-                                  SizedBox(width: 12),
-                                  Text(
-                                    'Profile Information',
-                                    style: TextStyle(
-                                      fontSize: isTablet ? 22.0 : 20.0,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.grey[800],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 24),
-                              _buildInfoRow(
-                                icon: Icons.badge,
-                                label: 'Role',
-                                value: _profileData!['role'] ?? 'N/A',
-                                isTablet: isTablet,
-                              ),
-                              Divider(height: 32),
-                              _buildInfoRow(
-                                icon: Icons.business,
-                                label: 'Company',
-                                value: _profileData!['company'] ?? 'N/A',
-                                isTablet: isTablet,
-                              ),
-                              Divider(height: 32),
-                              _buildInfoRow(
-                                icon: Icons.business_center,
-                                label: 'Company Name',
-                                value: _profileData!['companyname'] ?? 'N/A',
-                                isTablet: isTablet,
-                                isMultiline: true,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    SizedBox(height: size.height * 0.02),
-                    // Change Company Button
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: HexColor("#F4A62A").withOpacity(0.3),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: ElevatedButton.icon(
-                        onPressed:
-                            _isLoadingRoles ? null : _showChangeCompanyDialog,
-                        icon: _isLoadingRoles
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
-                                ),
-                              )
-                            : Icon(
-                                Icons.business_center,
-                                size: isTablet ? 24.0 : 20.0,
-                              ),
-                        label: Text(
-                          _isLoadingRoles ? 'Loading...' : 'Change Company',
-                          style: TextStyle(
-                            fontSize: isTablet ? 18.0 : 16.0,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: HexColor("#F4A62A"),
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(
-                            vertical: isTablet ? 18.0 : 16.0,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          elevation: 0,
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: size.height * 0.03),
-                    // Logout Button
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Confirm Logout'),
-                              content: const Text(
-                                'Are you sure you want to logout?',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(context).pop(false),
-                                  child: const Text('Cancel'),
-                                ),
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(context).pop(true),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.red,
-                                  ),
-                                  child: const Text('Logout'),
-                                ),
-                              ],
-                            ),
-                          );
-
-                          if (confirm == true) {
-                            final SharedPreferences sharedPreferences =
-                                await SharedPreferences.getInstance();
-                            sharedPreferences.remove('username');
-                            sharedPreferences.remove('email');
-                            sharedPreferences.remove('password');
-                            sharedPreferences.remove('kulonuwun');
-                            sharedPreferences.remove('monggo');
-                            sharedPreferences.remove('seckey');
-                            sharedPreferences.remove('otp_roles');
-                            await sharedPreferences.clear();
-
-                            Get.offAll(() => const LoginPage4());
-                            Get.snackbar(
-                              "Success Logout",
-                              "From V2RP Mobile",
-                              colorText: Colors.white,
-                              icon: const Icon(
-                                Icons.logout,
-                                color: Colors.white,
-                              ),
-                              backgroundColor: Colors.red,
-                              isDismissible: true,
-                              dismissDirection: DismissDirection.vertical,
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(
-                            vertical: isTablet ? 18.0 : 16.0,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.logout,
-                              size: isTablet ? 24.0 : 20.0,
-                            ),
-                            SizedBox(width: 12),
-                            Text(
-                              'LOGOUT',
-                              style: TextStyle(
-                                fontSize: isTablet ? 20.0 : 18.0,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: size.height * 0.03),
-                    // Version Card
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.all(isTablet ? 24.0 : 20.0),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              color: HexColor("#F4A62A"),
-                              size: isTablet ? 28.0 : 24.0,
-                            ),
-                            SizedBox(width: 12),
-                            Text(
-                              'Version',
-                              style: TextStyle(
-                                fontSize: isTablet ? 18.0 : 16.0,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[800],
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              '1.3.0',
-                              style: TextStyle(
-                                fontSize: isTablet ? 18.0 : 16.0,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: size.height * 0.02),
-                  ],
-                ),
+        backgroundColor: ApprovalMenuTheme.background,
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          elevation: 0,
+          backgroundColor: ApprovalMenuTheme.primary,
+          title: const Text(
+            'Profile',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+        body: RefreshConfiguration(
+          headerTriggerDistance: 110,
+          dragSpeedRatio: 0.65,
+          child: SmartRefresher(
+            controller: _refreshController,
+            enablePullDown: true,
+            enablePullUp: false,
+            onRefresh: _onPullRefresh,
+            header: WaterDropMaterialHeader(
+              backgroundColor: Colors.white,
+              color: ApprovalMenuTheme.primary,
+              distance: 80,
+              offset: 12,
+            ),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
               ),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: ColoredBox(
+                    color: ApprovalMenuTheme.primary,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                      child: _buildProfileHero(isTablet),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Container(
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      color: ApprovalMenuTheme.background,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(24),
+                      ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildProfileBody(isTablet),
+                        const SizedBox(height: 12),
+                        _buildActionButton(
+                          label: _isLoadingRoles
+                              ? 'Loading...'
+                              : 'Change Company',
+                          icon: Icons.business_center_outlined,
+                          color: ApprovalMenuTheme.primary,
+                          onPressed:
+                              _isLoadingRoles ? null : _showChangeCompanyDialog,
+                          isLoading: _isLoadingRoles,
+                          isTablet: isTablet,
+                        ),
+                        const SizedBox(height: 10),
+                        _buildActionButton(
+                          label: 'Logout',
+                          icon: Icons.logout_rounded,
+                          color: Colors.red.shade600,
+                          onPressed: _confirmLogout,
+                          isTablet: isTablet,
+                          outlined: true,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildVersionCard(isTablet),
+                      ],
+                    ),
+                  ),
+                ),
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: ColoredBox(
+                    color: ApprovalMenuTheme.background,
+                    child: SizedBox.expand(),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildProfileHero(bool isTablet) {
+    final avatarSize = isTablet ? 72.0 : 64.0;
+
+    return Container(
+      padding: EdgeInsets.all(isTablet ? 18 : 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withOpacity(0.22),
+            Colors.white.withOpacity(0.08),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withOpacity(0.35)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: avatarSize,
+            height: avatarSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: Image.asset(
+                'images/pp.png',
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  color: Colors.white,
+                  child: Icon(
+                    Icons.person_rounded,
+                    size: avatarSize * 0.5,
+                    color: ApprovalMenuTheme.primary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (finalUsername?.isNotEmpty ?? false)
+                      ? finalUsername!
+                      : 'User',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: isTablet ? 20 : 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  (finalEmail?.isNotEmpty ?? false)
+                      ? finalEmail!
+                      : '—',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: isTablet ? 14 : 13,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (_profileData?['role'] != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_profileData!['role']}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileBody(bool isTablet) {
+    if (_isLoading) {
+      return _buildSectionCard(
+        isTablet: isTablet,
+        title: 'Profile Information',
+        icon: Icons.person_outline_rounded,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 32),
+          child: Center(
+            child: CircularProgressIndicator(
+              color: ApprovalMenuTheme.primary,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return _buildSectionCard(
+        isTablet: isTablet,
+        title: 'Profile Information',
+        icon: Icons.error_outline_rounded,
+        child: Column(
+          children: [
+            Text(
+              _errorMessage!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: fetchProfile,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry'),
+              style: TextButton.styleFrom(
+                foregroundColor: ApprovalMenuTheme.primaryDark,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_profileData == null) {
+      return const SizedBox.shrink();
+    }
+
+    return _buildSectionCard(
+      isTablet: isTablet,
+      title: 'Profile Information',
+      icon: Icons.person_outline_rounded,
+      child: Column(
+        children: [
+          _buildInfoRow(
+            icon: Icons.badge_outlined,
+            label: 'Role',
+            value: _profileData!['role'] ?? 'N/A',
+            isTablet: isTablet,
+          ),
+          _buildDivider(),
+          _buildInfoRow(
+            icon: Icons.business_outlined,
+            label: 'Company',
+            value: _profileData!['company'] ?? 'N/A',
+            isTablet: isTablet,
+          ),
+          _buildDivider(),
+          _buildInfoRow(
+            icon: Icons.apartment_outlined,
+            label: 'Company Name',
+            value: _profileData!['companyname'] ?? 'N/A',
+            isTablet: isTablet,
+            isMultiline: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionCard({
+    required bool isTablet,
+    required String title,
+    required IconData icon,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: ApprovalMenuTheme.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: ApprovalMenuTheme.primaryDark,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: isTablet ? 17 : 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: Colors.grey.shade100),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+            child: child,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDivider() => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Divider(height: 1, color: Colors.grey.shade100),
+      );
+
+  Widget _buildActionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+    required bool isTablet,
+    bool isLoading = false,
+    bool outlined = false,
+  }) {
+    return Material(
+      color: outlined ? Colors.white : color,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onPressed,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: isTablet ? 16 : 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: outlined ? Border.all(color: color.withOpacity(0.5)) : null,
+            boxShadow: outlined
+                ? null
+                : [
+                    BoxShadow(
+                      color: color.withOpacity(0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isLoading)
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: outlined ? color : Colors.white,
+                  ),
+                )
+              else
+                Icon(icon, color: outlined ? color : Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: outlined ? color : Colors.white,
+                  fontSize: isTablet ? 16 : 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVersionCard(bool isTablet) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isTablet ? 18 : 16,
+        vertical: isTablet ? 16 : 14,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            color: ApprovalMenuTheme.primaryDark,
+            size: isTablet ? 22 : 20,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'App Version',
+            style: TextStyle(
+              fontSize: isTablet ? 15 : 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            '1.4.0',
+            style: TextStyle(
+              fontSize: isTablet ? 15 : 14,
+              fontWeight: FontWeight.bold,
+              color: ApprovalMenuTheme.primaryDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final sharedPreferences = await SharedPreferences.getInstance();
+    sharedPreferences.remove('username');
+    sharedPreferences.remove('email');
+    sharedPreferences.remove('password');
+    sharedPreferences.remove('kulonuwun');
+    sharedPreferences.remove('monggo');
+    sharedPreferences.remove('seckey');
+    sharedPreferences.remove('otp_roles');
+    await sharedPreferences.clear();
+
+    Get.offAll(() => const LoginPage4());
+    Get.snackbar(
+      'Success Logout',
+      'From V2RP Mobile',
+      colorText: Colors.white,
+      icon: const Icon(Icons.logout, color: Colors.white),
+      backgroundColor: Colors.red,
+      isDismissible: true,
+      dismissDirection: DismissDirection.vertical,
     );
   }
 
@@ -575,12 +666,19 @@ class _SettingScreenState extends State<SettingScreen> {
       crossAxisAlignment:
           isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
-        Icon(
-          icon,
-          color: HexColor("#F4A62A"),
-          size: isTablet ? 24.0 : 20.0,
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: ApprovalMenuTheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            icon,
+            color: ApprovalMenuTheme.primaryDark,
+            size: isTablet ? 20.0 : 18.0,
+          ),
         ),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -588,17 +686,17 @@ class _SettingScreenState extends State<SettingScreen> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: isTablet ? 14.0 : 12.0,
-                  color: Colors.grey[600],
+                  fontSize: isTablet ? 12.0 : 11.0,
+                  color: Colors.grey.shade500,
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 3),
               Text(
                 value,
                 style: TextStyle(
-                  fontSize: isTablet ? 16.0 : 15.0,
-                  color: Colors.grey[900],
+                  fontSize: isTablet ? 15.0 : 14.0,
+                  color: Colors.grey.shade900,
                   fontWeight: FontWeight.w600,
                 ),
                 maxLines: isMultiline ? 3 : 1,

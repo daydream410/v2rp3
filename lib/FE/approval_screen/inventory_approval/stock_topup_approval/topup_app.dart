@@ -1,21 +1,18 @@
-import 'dart:math';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:v2rp3/utils/hex_color.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:liquid_pull_to_refresh/liquid_pull_to_refresh.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:v2rp3/BE/resD.dart';
+import 'package:v2rp3/FE/shared/approval_ui.dart';
+import 'package:v2rp3/FE/navbar/navbar.dart';
+import 'package:http/http.dart' as http;
 
-import '../../../../BE/controller.dart';
-import '../../../../BE/reqip.dart';
-import '../../../../main.dart';
-import '../../../navbar/navbar.dart';
+import '../../../../../BE/controller.dart';
+import '../../../../../BE/reqip.dart';
+import '../../../../../BE/resD.dart';
+import '../../../../../main.dart';
 import 'topup_app2.dart';
 
 class StockTopupApp extends StatefulWidget {
@@ -43,20 +40,72 @@ class _StockTopupAppState extends State<StockTopupApp> {
       results = dataaa;
     } else {
       results = dataaa
-          .where((dataaa) => dataaa['header']['reffno']
+          .where((item) => item['header']['reffno']
               .toLowerCase()
               .contains(enteredKeyword.toLowerCase()))
           .toList();
     }
-    setState(() {
-      _foundUsers = results;
-    });
+    setState(() => _foundUsers = results);
+  }
+
+  void _openDetail(dynamic item) {
+    Get.to(() => StockTopupApp2(
+                                              seckey: item
+                                                  ['seckey'],
+                                              reffno: item
+                                                  ['header']['reffno'],
+                                              createdby: item
+                                                  ['header']['createdby'],
+                                              tanggal: item
+                                                  ['header']['tanggal'],
+                                              requestor: item
+                                                  ['header']['requestor'],
+                                              warehouse: item
+                                                  ['header']['warehouse'],
+                                            ));
+  }
+
+  Widget _buildList() {
+    return FutureBuilder(
+      future: dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Center(child: Text('Error Loading Data'));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+              child: CircularProgressIndicator(color: ApprovalTheme.primary),
+            ),
+          );
+        }
+        if (_foundUsers.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(
+              child: Text('No documents found',
+                  style: TextStyle(color: Colors.grey.shade500)),
+            ),
+          );
+        }
+        return Column(
+          children: _foundUsers.map<Widget>((item) {
+            final header = item['header'];
+            return ApprovalListCard(
+              title: header['reffno']?.toString() ?? '-',
+              subtitle:
+                  "${header['requestorname'] ?? ''} · ${DateFormat('dd MMM yyyy').format(DateTime.parse(header['tanggal']))}",
+              onTap: () => _openDetail(item),
+            );
+          }).toList(),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isIOS = Theme.of(context).platform == TargetPlatform.iOS;
-
     return WillPopScope(
       onWillPop: () async {
         final shouldPop = await showDialog<bool>(
@@ -76,400 +125,17 @@ class _StockTopupAppState extends State<StockTopupApp> {
             ],
           ),
         );
-        if (shouldPop == true) {
-          SystemNavigator.pop();
-        }
+        if (shouldPop == true) SystemNavigator.pop();
         return false;
       },
-      child: isIOS
-          ? CupertinoPageScaffold(
-              navigationBar: CupertinoNavigationBar(
-                transitionBetweenRoutes: true,
-                middle: const Text("Stock Top-up Approval"),
-                leading: GestureDetector(
-                  child: const Icon(CupertinoIcons.back),
-                  onTap: () {
-                    Get.to(const Navbar());
-                  },
-                ),
-              ),
-              child: LiquidPullToRefresh(
-                onRefresh: getDataa2,
-                color: HexColor("#F4A62A"),
-                height: 140,
-                showChildOpacityTransition: false,
-                child: ListView(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          CupertinoSearchTextField(
-                            controller:
-                                textControllers.stocktopupAppController.value,
-                            onChanged: (value) => _runFilter(value),
-                            itemSize: 30,
-                            itemColor: HexColor('#F4A62A'),
-                            prefixInsets:
-                                const EdgeInsets.only(left: 8, right: 8),
-                            suffixInsets: const EdgeInsets.only(right: 8),
-                          ),
-                          const SizedBox(height: 10),
-                          const Divider(
-                            color: Colors.black,
-                          ),
-                          const SizedBox(height: 10),
-                          FutureBuilder(
-                            future: dataFuture,
-                            builder: (context, snapshot) {
-                              if (snapshot.error != null) {
-                                return const Center(
-                                  child: Text('Error Loading Data'),
-                                );
-                              }
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Center(
-                                    child: Column(
-                                  children: [
-                                    DefaultTextStyle(
-                                      style: TextStyle(
-                                        color: Colors.black,
-                                        fontSize: 20,
-                                      ),
-                                      child: Text(
-                                        'Loading...',
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      height: 20,
-                                    ),
-                                    CircularProgressIndicator(),
-                                    SizedBox(
-                                      height: 20,
-                                    ),
-                                    DefaultTextStyle(
-                                        style: TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 20,
-                                        ),
-                                        child:
-                                            Text('Please Kindly Waiting...')),
-                                  ],
-                                ));
-                              } else {
-                                return Container(
-                                  height:
-                                      MediaQuery.of(context).size.height * 0.8,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: ListView.separated(
-                                    // shrinkWrap: true,
-                                    separatorBuilder: (context, index) {
-                                      return SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height *
-                                                0.01,
-                                      );
-                                    },
-                                    physics: const ClampingScrollPhysics(),
-                                    itemCount: _foundUsers.length,
-                                    itemBuilder: (context, index) {
-                                      return Card(
-                                        elevation: 5,
-                                        child: ListTile(
-                                          title: Text(
-                                            _foundUsers[index]['header']
-                                                ['reffno'],
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          subtitle: Text(
-                                            _foundUsers[index]['header']
-                                                    ['requestor'] +
-                                                " || " +
-                                                DateFormat('yyyy-MM-dd').format(
-                                                    DateTime.parse(
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['tanggal'])) +
-                                                " || " +
-                                                _foundUsers[index]['header']
-                                                    ['warehouse'],
-                                          ),
-                                          onTap: () {
-                                            Get.to(() => StockTopupApp2(
-                                              seckey: _foundUsers[index]
-                                                  ['seckey'],
-                                              reffno: _foundUsers[index]
-                                                  ['header']['reffno'],
-                                              createdby: _foundUsers[index]
-                                                  ['header']['createdby'],
-                                              tanggal: _foundUsers[index]
-                                                  ['header']['tanggal'],
-                                              requestor: _foundUsers[index]
-                                                  ['header']['requestor'],
-                                              warehouse: _foundUsers[index]
-                                                  ['header']['warehouse'],
-                                            ));
-                                          },
-                                          trailing: IconButton(
-                                            icon: const Icon(Icons
-                                                .arrow_forward_ios_rounded),
-                                            onPressed: () {
-                                              Get.to(() => StockTopupApp2(
-                                                seckey: _foundUsers[index]
-                                                    ['seckey'],
-                                                reffno: _foundUsers[index]
-                                                    ['header']['reffno'],
-                                                createdby: _foundUsers[index]
-                                                    ['header']['createdby'],
-                                                tanggal: _foundUsers[index]
-                                                    ['header']['tanggal'],
-                                                requestor: _foundUsers[index]
-                                                    ['header']['requestor'],
-                                                warehouse: _foundUsers[index]
-                                                    ['header']['warehouse'],
-                                              ));
-                                            },
-                                            color: HexColor('#F4A62A'),
-                                            hoverColor: HexColor('#F4A62A'),
-                                            splashColor: HexColor('#F4A62A'),
-                                          ),
-                                          tileColor: Colors.white,
-                                          textColor: Colors.black,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : Scaffold(
-              appBar: AppBar(
-                title: const Text("Stock Top-up Approval"),
-                centerTitle: true,
-                backgroundColor: HexColor("#F4A62A"),
-                foregroundColor: Colors.white,
-                elevation: 1,
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () {
-                    Get.to(() => const Navbar());
-                  },
-                ),
-              ),
-              body: LiquidPullToRefresh(
-                onRefresh: getDataa2,
-                color: HexColor("#F4A62A"),
-                height: 150,
-                showChildOpacityTransition: false,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: Padding(
-                    padding: const EdgeInsets.only(
-                      left: 16.0,
-                      right: 16.0,
-                      bottom: 0,
-                      top: 15.0,
-                    ),
-                    child: Column(
-                      children: [
-                        const SizedBox(
-                          height: 15,
-                        ),
-                        TextField(
-                          controller:
-                              textControllers.stocktopupAppController.value,
-                          onChanged: (value) => _runFilter(value),
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.assignment),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.search),
-                              color: HexColor('#F4A62A'),
-                              onPressed: () async {},
-                              splashColor: HexColor('#F4A62A'),
-                              tooltip: 'Search',
-                              hoverColor: HexColor('#F4A62A'),
-                            ),
-                            hintText: 'Reff No.',
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(5),
-                                borderSide:
-                                    const BorderSide(color: Colors.black)),
-                          ),
-                        ),
-                        const SizedBox(
-                          height: 10,
-                        ),
-                        const Divider(
-                          color: Colors.black,
-                          thickness: 0.8,
-                          height: 25,
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Item List'),
-                            const SizedBox(height: 25.0),
-                            FutureBuilder(
-                              future: dataFuture,
-                              builder: (context, snapshot) {
-                                if (snapshot.error != null) {
-                                  return const Center(
-                                    child: Text('Error Loading Data'),
-                                  );
-                                }
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return const Center(
-                                      child: Column(
-                                    children: [
-                                      Text('Loading...'),
-                                      SizedBox(
-                                        height: 20,
-                                      ),
-                                      CircularProgressIndicator(),
-                                      SizedBox(
-                                        height: 20,
-                                      ),
-                                      Text('Please Kindly Waiting...'),
-                                    ],
-                                  ));
-                                } else {
-                                  return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    children: [
-                                      SizedBox(
-                                        height:
-                                            MediaQuery.of(context).size.height *
-                                                0.65,
-                                        child: ListView.separated(
-                                          // shrinkWrap: true,
-                                          separatorBuilder: (context, index) {
-                                            return SizedBox(
-                                              height: MediaQuery.of(context)
-                                                      .size
-                                                      .height *
-                                                  0.01,
-                                            );
-                                          },
-                                          physics:
-                                              const ClampingScrollPhysics(),
-                                          itemCount: _foundUsers.length,
-                                          itemBuilder: (context, index) {
-                                            return Card(
-                                              elevation: 5,
-                                              child: ListTile(
-                                                title: Text(
-                                                  _foundUsers[index]['header']
-                                                      ['reffno'],
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                                subtitle: Text(
-                                                  _foundUsers[index]['header']
-                                                          ['requestor'] +
-                                                      " || " +
-                                                      DateFormat('yyyy-MM-dd')
-                                                          .format(DateTime.parse(
-                                                              _foundUsers[index]
-                                                                      ['header']
-                                                                  [
-                                                                  'tanggal'])) +
-                                                      " || " +
-                                                      _foundUsers[index]
-                                                              ['header']
-                                                          ['warehouse'],
-                                                ),
-                                                onTap: () {
-                                                  Get.to(() => StockTopupApp2(
-                                                    seckey: _foundUsers[index]
-                                                        ['seckey'],
-                                                    reffno: _foundUsers[index]
-                                                        ['header']['reffno'],
-                                                    createdby:
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['createdby'],
-                                                    tanggal: _foundUsers[index]
-                                                        ['header']['tanggal'],
-                                                    requestor:
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['requestor'],
-                                                    warehouse:
-                                                        _foundUsers[index]
-                                                                ['header']
-                                                            ['warehouse'],
-                                                  ));
-                                                },
-                                                trailing: IconButton(
-                                                  icon: const Icon(Icons
-                                                      .arrow_forward_rounded),
-                                                  onPressed: () {
-                                                    Get.to(() => StockTopupApp2(
-                                                      seckey: _foundUsers[index]
-                                                          ['seckey'],
-                                                      reffno: _foundUsers[index]
-                                                          ['header']['reffno'],
-                                                      createdby:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['createdby'],
-                                                      tanggal:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['tanggal'],
-                                                      requestor:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['requestor'],
-                                                      warehouse:
-                                                          _foundUsers[index]
-                                                                  ['header']
-                                                              ['warehouse'],
-                                                    ));
-                                                  },
-                                                  color: HexColor('#F4A62A'),
-                                                  hoverColor:
-                                                      HexColor('#F4A62A'),
-                                                  splashColor:
-                                                      HexColor('#F4A62A'),
-                                                ),
-                                                tileColor: Colors.white,
-                                                textColor: Colors.black,
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+      child: ApprovalListScaffold(
+        title: 'Stock Top-up Approval',
+        onBack: () => Get.to(const Navbar()),
+        searchController: textControllers.stocktopupAppController.value,
+        onSearchChanged: _runFilter,
+        onRefresh: getDataa2,
+        child: _buildList(),
+      ),
     );
   }
 
@@ -506,38 +172,5 @@ class _StockTopupAppState extends State<StockTopupApp> {
       print(e);
     }
   }
-
-  Future<void> getDataa2() async {
-    HttpOverrides.global = MyHttpOverrides();
-    final SharedPreferences sharedPreferences =
-        await SharedPreferences.getInstance();
-    var finalKulonuwun = sharedPreferences.getString('kulonuwun');
-    var finalMonggo = sharedPreferences.getString('monggo');
-    var kulonuwun = MsgHeader.kulonuwun;
-    var monggo = MsgHeader.monggo;
-    try {
-      // http://156.67.217.113/api/v1/mobile
-      var getData = await http.get(
-        // Uri.http('156.67.217.113', '/api/v1/mobile/approval/stocktopup'),
-        Uri.https('v2rp.net', '/api/v1/mobile/approval/stocktopup'),
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'kulonuwun': finalKulonuwun ?? kulonuwun,
-          'monggo': finalMonggo ?? monggo,
-        },
-      );
-      final caConfirmData = json.decode(getData.body);
-
-      // final data = caConfirmData['data'];
-      setState(() {
-        dataaa = caConfirmData['data'];
-        _foundUsers = dataaa;
-      });
-
-      print("getdataaaa " + caConfirmData.toString());
-      print("dataaaaaaaaaaaaaaa " + dataaa.toString());
-    } catch (e) {
-      print(e);
-    }
-  }
+  Future<void> getDataa2() async => getDataa();
 }

@@ -18,6 +18,7 @@ import '../../../../main.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:v2rp3/FE/approval_screen/inventory_approval/stock_topup_approval/topup_app.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
+import 'package:v2rp3/FE/shared/approval_ui.dart';
 
 class StockTopupApp2 extends StatefulWidget {
   final seckey;
@@ -60,18 +61,63 @@ class _StockTopupApp2State extends State<StockTopupApp2> {
   String reasonValue = '';
   static TextControllers textControllers = Get.put(TextControllers());
 
+  static const _statusActions = [
+    ApprovalActionMeta(label: 'Pending', icon: Icons.hourglass_empty_rounded, color: Color(0xFF9E9E9E)),
+    ApprovalActionMeta(label: 'Approve', icon: Icons.check_circle_outline_rounded, color: Color(0xFFF4A62A)),
+    ApprovalActionMeta(label: 'Send To Draft', icon: Icons.edit_note_outlined, color: Color(0xFFFF9800)),
+  ];
+
+  String get _formattedDate =>
+      DateFormat('dd MMM yyyy').format(DateTime.parse(widget.tanggal));
+
+  void _onStatusSelected(String status) {
+    setState(() {
+      valueStatus = status;
+      if (status == "Pending") { updstatus = "0"; isVisible = false; }
+      else if (status == "Approve") { updstatus = "1"; isVisible = true; }
+      else if (status == "Send To Draft") { updstatus = "-9"; isVisible = true; }
+    });
+  }
+  List<ApprovalInfoField> _itemDetailFields(dynamic e) {
+    return [
+      ApprovalInfoField('Warehouse', (e['warehouse'] ?? '').toString()),
+      ApprovalInfoField('Item', (e['stockcode'] ?? '').toString()),
+      ApprovalInfoField('Avg. QTY Usage (Monthly)', (ApprovalTheme.currencyFmt.format(e['qty_avguse'])).toString()),
+      ApprovalInfoField('Order Time Days', (e['order_time'] ?? '').toString()),
+      ApprovalInfoField('Current QTY (ALL WH)', (ApprovalTheme.currencyFmt.format(e['allwarehouse'])).toString()),
+      ApprovalInfoField('Current QTY', (ApprovalTheme.currencyFmt.format(e['qty_onhand'])).toString()),
+      ApprovalInfoField('On Order QTY', (ApprovalTheme.currencyFmt.format(e['qty_onorder'])).toString()),
+      ApprovalInfoField('On Request QTY', (ApprovalTheme.currencyFmt.format(e['qty_onreq'])).toString()),
+      ApprovalInfoField('Stock Freeze QTY', (ApprovalTheme.currencyFmt.format(e['qty_freeze'])).toString()),
+      ApprovalInfoField('S/T QTY', (ApprovalTheme.currencyFmt.format(e['st_freeze'])).toString()),
+      ApprovalInfoField('QTY To Top-up', (ApprovalTheme.currencyFmt.format(e['qty_topup'])).toString()),
+    ];
+  }
+  Widget _buildBody() {
+    return FutureBuilder(
+      future: dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error Loading Data', style: TextStyle(color: Colors.grey.shade500)));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator(color: ApprovalTheme.primary));
+        }
+        return ApprovalDetailItemsColumn(
+          count: dataaa.length,
+          tableRows: [
+            for (var i = 0; i < dataaa.length; i++)
+              _itemDetailFields(dataaa[i]),
+          ],
+          children: const [],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    Size size = MediaQuery.of(context).size;
-
-    // bool isIOS = Theme.of(context).platform == TargetPlatform.iOS;
-
-    List listStatus = [
-      "Pending",
-      "Approve",
-      // "Reject",
-      "Send To Draft",
-    ];
+    final hasAction = isVisible && valueStatus.isNotEmpty;
     return WillPopScope(
       onWillPop: () async {
         final shouldPop = await showDialog<bool>(
@@ -80,672 +126,38 @@ class _StockTopupApp2State extends State<StockTopupApp2> {
             title: const Text('Are You sure?'),
             content: const Text('Do you want to exit V2RP Mobile?'),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('No'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Yes'),
-              ),
+              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('No')),
+              TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Yes')),
             ],
           ),
         );
-        if (shouldPop == true) {
-          SystemNavigator.pop();
-        }
+        if (shouldPop == true) SystemNavigator.pop();
         return false;
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text("Stock Top-up Approval"),
-          centerTitle: true,
-          backgroundColor: HexColor("#F4A62A"),
-          foregroundColor: Colors.white,
-          elevation: 1,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              Get.to(() => StockTopupApp());
-            },
-          ),
+      child: ApprovalDetailScaffold(
+        docNo: widget.reffno ?? '',
+        subtitle: _formattedDate,
+        onBack: () => Get.to(() => StockTopupApp()),
+        infoPanel: ApprovalInfoPanel(
+          collapsedSubtitle: widget.requestor ?? '-',
+          fields: [
+            ApprovalInfoField('Request By', widget.requestor ?? '-'),
+            ApprovalInfoField('Warehouse', widget.warehouse ?? '-'),
+          ],
         ),
-        body: Padding(
-          padding: const EdgeInsets.only(
-            left: 16.0,
-            right: 16.0,
-            bottom: 0,
-            top: 5.0,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                margin: EdgeInsets.symmetric(
-                  horizontal: size.width * 0.001, //atur lebar kotak putih
-                  vertical: size.height * 0.02, //atur lokasi kotak putih
-                ),
-                height: size.height * 0.30, //atur panjang kotak putih
-                decoration: BoxDecoration(
-                  color: HexColor("#F4A62A"),
-                  borderRadius: const BorderRadius.all(
-                    Radius.circular(10),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      offset: const Offset(0, 10),
-                      blurRadius: 60,
-                      color: Colors.grey.withOpacity(0.40),
-                    ),
-                  ],
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 10.0),
-                      Row(
-                        children: [
-                          Padding(
-                            padding: EdgeInsets.only(left: size.width * 0.05),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Reffno : ',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.reffno ?? "",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Date : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      DateFormat('yyyy-MM-dd').format(
-                                          DateTime.parse(widget.tanggal)),
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Request By : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.requestor ?? "",
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Created By : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.createdby ?? "",
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Warehouse : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.warehouse ?? "",
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 5,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Request Status : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        color: Colors.transparent,
-                                        border: Border.all(
-                                            color: Colors.white, width: 1),
-                                        borderRadius: BorderRadius.circular(1),
-                                      ),
-                                      child: DropdownButton(
-                                        padding:
-                                            const EdgeInsets.only(left: 10),
-                                        hint: const Text(
-                                          "Pending",
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        icon: const Icon(
-                                          Icons.arrow_drop_down,
-                                          color: Colors.white,
-                                        ),
-                                        dropdownColor: HexColor("#F4A62A"),
-                                        underline: Container(), //empty line
-                                        iconSize: 30,
-                                        value: valueStatus.isNotEmpty
-                                            ? valueStatus
-                                            : null,
-                                        onChanged: (newValueStatus) {
-                                          setState(() {
-                                            valueStatus =
-                                                newValueStatus as String;
-
-                                            if (valueStatus == "Pending") {
-                                              updstatus = "0";
-                                              isVisible = false;
-                                              print("updstatus " +
-                                                  updstatus.toString());
-                                            } else if (valueStatus ==
-                                                "Approve") {
-                                              updstatus = "1";
-                                              isVisible = true;
-                                              print("updstatus " +
-                                                  updstatus.toString());
-                                            } else if (valueStatus ==
-                                                "Send To Draft") {
-                                              updstatus = "-9";
-                                              isVisible = true;
-                                              print("updstatus " +
-                                                  updstatus.toString());
-                                            } else {
-                                              updstatus = "-1";
-                                              isVisible = true;
-                                              print("updstatus " +
-                                                  updstatus.toString());
-                                            }
-                                          });
-                                        },
-                                        items: listStatus.map((valueStatuss) {
-                                          return DropdownMenuItem(
-                                            value: valueStatuss,
-                                            child: Text(
-                                              valueStatuss,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          );
-                                        }).toList(),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              FutureBuilder(
-                future: dataFuture,
-                builder: (BuildContext context, AsyncSnapshot snapshot) {
-                  if (snapshot.error != null) {
-                    return const Center(
-                      child: Text('Error Loading Data'),
-                    );
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                        child: Column(
-                      children: [
-                        Text('Loading Detail...'),
-                        SizedBox(
-                          height: 20,
-                        ),
-                        CircularProgressIndicator(),
-                        SizedBox(
-                          height: 20,
-                        ),
-                        Text('Please Kindly Waiting...'),
-                      ],
-                    ));
-                  } else {
-                    print("snapshot data " + snapshot.data.toString());
-                    return Expanded(
-                      child: DataTable2(
-                        columnSpacing: 12,
-                        horizontalMargin: 12,
-                        minWidth: 1000,
-                        columns: const [
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Warehouse',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Item',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Avg.',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'QTY Usage',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  '(Monthly)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Order',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Time',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Days',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Current',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'QTY',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  '(ALL WH)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Current',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'QTY',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.M,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'On',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Order',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'QTY',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'On',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Request',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'QTY',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Stock',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Freeze',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'QTY',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'S/T',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'QTY',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.M,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'QTY To',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Top-up',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.M,
-                          ),
-                        ],
-                        rows: dataaa
-                            .map((e) => DataRow(cells: [
-                                  DataCell(Text(
-                                    e['warehouse'] ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    e['stockcode'] ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    NumberFormat.currency(
-                                            locale: 'eu', symbol: '')
-                                        .format(e['qty_avguse']),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    e['order_time'] ?? '',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    NumberFormat.currency(
-                                            locale: 'eu', symbol: '')
-                                        .format(e['allwarehouse']),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    NumberFormat.currency(
-                                            locale: 'eu', symbol: '')
-                                        .format(e['qty_onhand']),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    NumberFormat.currency(
-                                            locale: 'eu', symbol: '')
-                                        .format(e['qty_onorder']),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    NumberFormat.currency(
-                                            locale: 'eu', symbol: '')
-                                        .format(e['qty_onreq']),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    NumberFormat.currency(
-                                            locale: 'eu', symbol: '')
-                                        .format(e['qty_freeze']),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    NumberFormat.currency(
-                                            locale: 'eu', symbol: '')
-                                        .format(e['st_freeze']),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                  DataCell(Text(
-                                    NumberFormat.currency(
-                                            locale: 'eu', symbol: '')
-                                        .format(e['qty_topup']),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                    ),
-                                  )),
-                                ]))
-                            .toList(),
-                      ),
-                    );
-                  }
-                },
-              ),
-              const SizedBox(
-                height: 10,
-              ),
-            ],
-          ),
-        ),
-        bottomNavigationBar: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Visibility(
-            visible: isVisible,
-            child: TextButton(
-              child: const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text('S U B M I T'),
-              ),
-              onPressed: () async {
-                // sendConfirm();
-                print('updstatus ' + updstatus.toString());
-                if (updstatus == '-9') {
-                  reason();
-                } else {
-                  sendConfirm();
-                }
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: HexColor("#F4A62A"),
-              ),
-            ),
-          ),
+        actionSection: ApprovalActionGrid(actions: _statusActions, selectedLabel: valueStatus, onSelected: _onStatusSelected),
+        body: _buildBody(),
+        bottomBar: ApprovalDetailBottomBar(
+          totalPrice: totalPrice, itemCount: dataaa.length,
+          selectedAction: hasAction ? valueStatus : null,
+          actionColor: hasAction ? ApprovalTheme.primary : null,
+          idleHint: 'Select an action to continue',
+          onSubmit: hasAction ? () { if (updstatus == '-9') { reason(); } else { sendConfirm(); } } : null,
         ),
       ),
     );
   }
+
 
   Future<dynamic> getDataa() async {
     HttpOverrides.global = MyHttpOverrides();
@@ -766,8 +178,13 @@ class _StockTopupApp2State extends State<StockTopupApp2> {
         },
       );
       final caConfirmData = json.decode(getData.body);
-      dataaa = caConfirmData['data']['detail'];
+      final _data = caConfirmData['data'];
+      if (_data is Map && _data['header'] is Map) {
+      }
+      final details = caConfirmData['data']['detail'];
+      if (mounted) { setState(() => dataaa = details); } else { dataaa = details; }
       print("dataaa " + dataaa.toString());
+      if (mounted) setState(() {});
       return dataaa;
     } catch (e) {
       print(e);

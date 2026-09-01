@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/FE/approval_screen/cash_bank/cash_advance_approval/ca_app.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
+import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/BE/controller.dart';
 import 'package:v2rp3/routes/api_name.dart';
@@ -57,11 +58,81 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
   double totalPrice = 0;
   var valueButton;
   String reasonValue = '';
+  String _selectionAction = '';
+
+  static const _selectionActions = [
+    ApprovalActionMeta(label: 'Reject Selected', icon: Icons.cancel_outlined, color: Color(0xFFE53935)),
+    ApprovalActionMeta(label: 'Send To Draft (ALL)', icon: Icons.edit_note_outlined, color: Color(0xFFFF9800)),
+  ];
+
+  String get _formattedDate =>
+      DateFormat('dd MMM yyyy').format(DateTime.parse(widget.tanggal));
+
+  void _onSelectionAction(String label) {
+    setState(() {
+      _selectionAction = label;
+      if (label == 'Reject Selected') valueButton = '-1';
+      else if (label == 'Send To Draft (ALL)') valueButton = '-9';
+    });
+  }
+  List<ApprovalInfoField> _itemDetailFields(dynamic e) {
+    return [
+      ApprovalInfoField('CA No', (e['nokasbon'] ?? '').toString()),
+      ApprovalInfoField('Project Name', (e['projectname'] ?? '').toString()),
+      ApprovalInfoField('Req By', (e['requestorname'] ?? '').toString()),
+      ApprovalInfoField('Type', (e['tipe'] == 0 ? 'Bugdet' : 'Item').toString()),
+      ApprovalInfoField('Acc Name', e['itemcoa']?.toString() ?? '-'),
+      ApprovalInfoField('Desc', e['ket']?.toString() ?? '-'),
+      ApprovalInfoField('Unit', (e['unit'].toString())),
+      ApprovalInfoField('QTY', (e['qty'].toString())),
+      ApprovalInfoField('Price', (ApprovalTheme.currencyFmt.format(e['harga'])).toString()),
+      ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(e['amount'])).toString()),
+      ApprovalInfoField('Buget Avail', (ApprovalTheme.currencyFmt.format(e['budget']['budgetavailable'])).toString()),
+    ];
+  }
+  Widget _buildBody() {
+    return FutureBuilder(
+      future: dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error Loading Data', style: TextStyle(color: Colors.grey.shade500)));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator(color: ApprovalTheme.primary));
+        }
+                return ApprovalDetailItemsColumn(
+          count: dataaa.length,
+          selectable: true,
+          isRowSelected: (i) =>
+              selectedDetails.contains(dataaa[i]['urutan']),
+          onRowSelectionChanged: (i, v) {
+            setState(() {
+              final id = dataaa[i]['urutan'];
+              if (v == true) {
+                selectedDetails.add(id);
+                selectedGak = true;
+              } else {
+                selectedDetails.remove(id);
+                if (selectedDetails.isEmpty) {
+                  selectedGak = false;
+                  _selectionAction = '';
+                }
+              }
+            });
+          },
+          tableRows: [
+            for (var i = 0; i < dataaa.length; i++)
+              _itemDetailFields(dataaa[i]),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    Size size = MediaQuery.of(context).size;
-
+    final hasSelection = selectedGak;
+    final displayAction = _selectionAction.isNotEmpty ? _selectionAction : 'Approve All';
     return WillPopScope(
       onWillPop: () async {
         final shouldPop = await showDialog<bool>(
@@ -70,603 +141,46 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
             title: const Text('Are You sure?'),
             content: const Text('Do you want to exit V2RP Mobile?'),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('No'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Yes'),
-              ),
+              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('No')),
+              TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Yes')),
             ],
           ),
         );
-        if (shouldPop == true) {
-          SystemNavigator.pop();
-        }
+        if (shouldPop == true) SystemNavigator.pop();
         return false;
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text("Cash Advance Approval"),
-          centerTitle: true,
-          backgroundColor: HexColor("#F4A62A"),
-          foregroundColor: Colors.white,
-          elevation: 1,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              Get.to(() => CashAdvanceApproval());
-            },
-          ),
+      child: ApprovalDetailScaffold(
+        docNo: widget.nokasbon ?? '',
+        subtitle: _formattedDate,
+        onBack: () => Get.to(() => CashAdvanceApproval()),
+        infoPanel: ApprovalInfoPanel(
+          collapsedSubtitle: widget.requestorname ?? '-',
+          fields: [
+            ApprovalInfoField('Date', _formattedDate),
+            ApprovalInfoField('Request By', widget.requestorname ?? '-'),
+          ],
+          reason: widget.ket,
         ),
-        body: Padding(
-          padding: const EdgeInsets.only(
-            left: 16.0,
-            right: 16.0,
-            bottom: 0,
-            top: 5.0,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                margin: EdgeInsets.symmetric(
-                  horizontal: size.width * 0.001, //atur lebar kotak putih
-                  vertical: size.height * 0.02, //atur lokasi kotak putih
-                ),
-                height: size.height * 0.25, //atur panjang kotak putih
-                decoration: BoxDecoration(
-                  color: HexColor("#F4A62A"),
-                  borderRadius: const BorderRadius.all(
-                    Radius.circular(10),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      offset: const Offset(0, 10),
-                      blurRadius: 60,
-                      color: Colors.grey.withOpacity(0.40),
-                    ),
-                  ],
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 10.0),
-                      Row(
-                        children: [
-                          Padding(
-                            padding: EdgeInsets.only(left: size.width * 0.05),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'CA No : ',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.nokasbon ?? "",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Date : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      DateFormat('yyyy-MM-dd').format(
-                                          DateTime.parse(widget.tanggal)),
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'Request By : ',
-                                      style: TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.requestorname ?? "",
-                                      style: const TextStyle(
-                                        fontSize: 15.0,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                                Container(
-                                  // margin: const EdgeInsets.all(15.0),
-                                  padding: const EdgeInsets.all(3.0),
-                                  width: size.width * 0.8,
-                                  height: size.height * 0.1,
-                                  decoration: BoxDecoration(
-                                      border: Border.all(
-                                    color: Colors.white,
-                                  )),
-                                  child: Text(
-                                    widget.ket ?? "",
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(
-                                  height: 10,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Visibility(
-                visible: selectedGak,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ButtonStyle(
-                          backgroundColor:
-                              MaterialStateProperty.all(Colors.red),
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            valueButton = '-1';
-                          });
-                          print("value button " + valueButton);
-                          // submitData();
-                          reason();
-                        },
-                        child: const Text(
-                          'Reject Selected',
-                          style: TextStyle(
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(
-                      width: 20,
-                    ),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ButtonStyle(
-                          backgroundColor: MaterialStateProperty.all(
-                            HexColor("#F4A62A"),
-                          ),
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            valueButton = '-9';
-                          });
-                          print("value button " + valueButton);
-                          // submitData();
-                          reason();
-                        },
-                        child: const Text(
-                          'Send To Draft (ALL)',
-                          style: TextStyle(
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              FutureBuilder(
-                future: dataFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.error != null) {
-                    return const Center(
-                      child: Text('Error Loading Data'),
-                    );
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                        child: Column(
-                      children: [
-                        Text('Loading Detail...'),
-                        SizedBox(
-                          height: 20,
-                        ),
-                        CircularProgressIndicator(),
-                      ],
-                    ));
-                  } else {
-                    return Expanded(
-                      child: DataTable2(
-                        columnSpacing: 12,
-                        horizontalMargin: 12,
-                        minWidth: 1000,
-                        dataRowHeight: 90,
-                        columns: const [
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'CA',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'No',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Project',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Name',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Req',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'By',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.M,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Type',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.M,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Acc',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Name',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.M,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Desc',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            size: ColumnSize.L,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Unit',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.S,
-                          ),
-                          DataColumn2(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'QTY',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                            size: ColumnSize.S,
-                          ),
-                          DataColumn(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Price',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                          ),
-                          DataColumn(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Amount',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                          ),
-                          DataColumn(
-                            label: Column(
-                              children: [
-                                Text(
-                                  'Buget',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                Text(
-                                  'Avail',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            numeric: true,
-                          ),
-                        ],
-                        rows: dataaa
-                            .map((e) => DataRow2(
-                                    selected:
-                                        selectedDetails.contains(e["urutan"]),
-                                    onSelectChanged: (isSelected) {
-                                      setState(() {
-                                        final isAdding =
-                                            isSelected != null && isSelected;
-                                        isAdding
-                                            ? selectedDetails.add(e["urutan"])
-                                            : selectedDetails
-                                                .remove(e["urutan"]);
-                                        if (isSelected != null) {
-                                          selectedGak = true;
-                                        }
-                                      });
-                                    },
-                                    cells: [
-                                      DataCell(Text(
-                                        e['nokasbon'] ?? '',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['projectname'] ?? '',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['requestorname'] ?? '',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['tipe'] == 0 ? 'Bugdet' : 'Item',
-                                        // e['tipe'].toString(),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['itemcoa'],
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['ket'],
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['unit'].toString(),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        e['qty'].toString(),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        NumberFormat.currency(
-                                                locale: 'eu', symbol: '')
-                                            .format(e['harga']),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        NumberFormat.currency(
-                                                locale: 'eu', symbol: '')
-                                            .format(e['amount']),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                      DataCell(Text(
-                                        NumberFormat.currency(
-                                                locale: 'eu', symbol: '')
-                                            .format(
-                                                e['budget']['budgetavailable']),
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                        ),
-                                      )),
-                                    ]))
-                            .toList(),
-                      ),
-                    );
-                  }
-                },
-              ),
-              const SizedBox(
-                width: 20,
-              ),
-              FutureBuilder(
-                future: dataFuture,
-                builder: (BuildContext context, AsyncSnapshot snapshot) {
-                  if (snapshot.error != null) {
-                    return const Center(
-                      child: Text('Error Loading Data'),
-                    );
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                        child: Column(
-                      children: [
-                        SizedBox(
-                          height: 20,
-                        ),
-                        Text('Please Kindly Waiting...'),
-                      ],
-                    ));
-                  } else {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        const Text(
-                          'TOTAL = ',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          NumberFormat.currency(locale: 'eu', symbol: '')
-                              .format(totalPrice),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-        bottomNavigationBar: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Visibility(
-            visible: selectedGak,
-            child: TextButton(
-              child: const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text('A P P R O V E   A L L'),
-              ),
-              onPressed: () async {
-                setState(() {
-                  valueButton = '1';
-                });
-                print("value button " + valueButton);
-                submitData();
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: HexColor("#F4A62A"),
-              ),
-            ),
-          ),
+        actionSection: hasSelection ? ApprovalActionGrid(
+          actions: _selectionActions, selectedLabel: _selectionAction, onSelected: _onSelectionAction,
+        ) : null,
+        body: _buildBody(),
+        bottomBar: ApprovalDetailBottomBar(
+          totalPrice: totalPrice, itemCount: dataaa.length,
+          selectedAction: hasSelection ? displayAction : null,
+          actionColor: hasSelection ? (_selectionAction.isNotEmpty
+              ? ApprovalActions.colorFor(_selectionAction, _selectionActions) : ApprovalTheme.primary) : null,
+          submitLabel: _selectionAction.isNotEmpty ? 'Submit' : 'Approve All',
+          idleHint: 'Select items to continue',
+          onSubmit: hasSelection ? () {
+            if (_selectionAction.contains('Draft') || _selectionAction.contains('Reject')) reason();
+            else { setState(() => valueButton = '1'); submitData(); }
+          } : null,
         ),
       ),
     );
   }
+
 
   Future<dynamic> getDataa() async {
     HttpOverrides.global = MyHttpOverrides();
@@ -691,6 +205,9 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
         },
       );
       final caConfirmData = json.decode(getData.body);
+      final _data = caConfirmData['data'];
+      if (_data is Map && _data['header'] is Map) {
+      }
       setState(() {
         dataaa = caConfirmData['data']['detail'] ?? [];
 
@@ -702,6 +219,7 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
       });
       print("totalllll  " + totalPrice.toString());
       print("dataaa " + dataaa.toString());
+      if (mounted) setState(() {});
       return dataaa;
     } on TimeoutException catch (e) {
       print('Timeout error: $e');
