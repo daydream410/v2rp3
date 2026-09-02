@@ -44,14 +44,15 @@ class GrApp2 extends StatefulWidget {
 }
 
 class _GrApp2State extends State<GrApp2> {
-  static late List dataaa = <CaConfirmData>[];
+  List<dynamic> dataaa = [];
 
   late Future dataFuture;
 
   @override
   void initState() {
     super.initState();
-
+    dataaa = [];
+    totalPrice = 0;
     dataFuture = getDataa();
   }
 
@@ -62,6 +63,17 @@ class _GrApp2State extends State<GrApp2> {
   var updstatus = "0";
   double totalPrice = 0;
   bool isVisible = false;
+
+  double get _detailTotal {
+    final fromAmount = approvalSumLineAmount(
+      dataaa.whereType<Map<dynamic, dynamic>>(),
+    );
+    if (fromAmount != 0) return fromAmount;
+    return approvalSumField(dataaa, 'rcvd', fallbackKey: 'qty');
+  }
+
+  bool get _useQuantityTotal =>
+      approvalSumLineAmount(dataaa.whereType<Map<dynamic, dynamic>>()) == 0;
   static const _statusActions = [
     ApprovalActionMeta(label: 'Pending', icon: Icons.hourglass_empty_rounded, color: Color(0xFF9E9E9E)),
     ApprovalActionMeta(label: 'Approve', icon: Icons.check_circle_outline_rounded, color: Color(0xFFF4A62A)),
@@ -152,7 +164,10 @@ class _GrApp2State extends State<GrApp2> {
         actionSection: ApprovalActionGrid(actions: _statusActions, selectedLabel: valueStatus, onSelected: _onStatusSelected),
         body: _buildBody(),
         bottomBar: ApprovalDetailBottomBar(
-          totalPrice: totalPrice, itemCount: dataaa.length,
+          totalPrice: _detailTotal,
+          totalLabel: _useQuantityTotal ? 'Total QTY Rcvd' : 'Total Amount',
+          quantityTotal: _useQuantityTotal,
+          itemCount: dataaa.length,
           selectedAction: hasAction ? valueStatus : null,
           actionColor: hasAction ? ApprovalTheme.primary : null,
           idleHint: 'Select an action to continue',
@@ -184,9 +199,26 @@ class _GrApp2State extends State<GrApp2> {
       final _data = caConfirmData['data'];
       if (_data is Map && _data['header'] is Map) {
       }
-      final details = caConfirmData['data']['detail'];
-      if (mounted) { setState(() => dataaa = details); } else { dataaa = details; }
-      print("totalllll  " + totalPrice.toString());
+      final data = caConfirmData['data'];
+      final rawDetails =
+          data is Map ? (data['detail'] ?? data['details']) : null;
+      final details = rawDetails is List ? rawDetails : <dynamic>[];
+      final fromAmount = approvalSumLineAmount(
+        details.whereType<Map<dynamic, dynamic>>(),
+      );
+      final total = fromAmount != 0
+          ? fromAmount
+          : approvalSumField(details, 'rcvd', fallbackKey: 'qty');
+      if (mounted) {
+        setState(() {
+          dataaa = details;
+          totalPrice = total;
+        });
+      } else {
+        dataaa = details;
+        totalPrice = total;
+      }
+      print("totalllll  $totalPrice (calc=$total, lines=${details.length})");
       print("dataaa " + dataaa.toString());
       if (mounted) setState(() {});
       return dataaa;

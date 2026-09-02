@@ -206,8 +206,8 @@ class _ArApproval2State extends State<ArApproval2> {
       totalPrice = 0;
       totalPrice2 = 0;
       for (var item in dataaa) {
-        totalPrice += item["amount_forex"];
-        totalPrice2 += item["amount_base"];
+        totalPrice += approvalToDouble(item["amount_forex"]);
+        totalPrice2 += approvalToDouble(item["amount_base"]);
       }
       print("totalllll  " + totalPrice.toString());
       print("dataaa " + dataaa.toString());

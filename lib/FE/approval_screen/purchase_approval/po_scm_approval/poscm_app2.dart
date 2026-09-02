@@ -232,9 +232,12 @@ class _PoScmApp2State extends State<PoScmApp2> {
       gTTL = 0;
 
       for (var item in dataaa) {
-        sTTL += item["qty"] * item["harga"];
-        dTTL += item["disc"] * (item["qty"] * item["harga"]) / 100;
-        sTAX += item["taxAmount"];
+        final qty = approvalToDouble(item["qty"]);
+        final harga = approvalToDouble(item["harga"]);
+        final lineTotal = qty * harga;
+        sTTL += lineTotal;
+        dTTL += approvalToDouble(item["disc"]) * lineTotal / 100;
+        sTAX += approvalToDouble(item["taxAmount"]);
 
         if (item["tax"] == ':0') {
           dTAX == '0';

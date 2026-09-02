@@ -79,15 +79,32 @@ class _StockAdjApp2State extends State<StockAdjApp2> {
       else if (status == "Send To Draft") { updstatus = "-9"; isVisible = true; }
     });
   }
+
+  double _toDouble(dynamic value) => approvalToDouble(value);
+
+  double _lineAmount(Map<String, dynamic> item) {
+    final qtyStock = _toDouble(item['qtystock']);
+    final adjustTo = _toDouble(item['adjusto']);
+    final cost = _toDouble(item['costperunit']);
+    final newCost = _toDouble(item['newcost']);
+    return (adjustTo * newCost) - (qtyStock * cost);
+  }
+
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
+    final qtyStock = _toDouble(e['qtystock']);
+    final adjustTo = _toDouble(e['adjusto']);
+    final qtyDiff = adjustTo - qtyStock;
+    final cost = _toDouble(e['costperunit']);
+    final newCost = _toDouble(e['newcost']);
     return [
       ApprovalInfoField('Item ID', (e['stockcode'] ?? '').toString()),
-      ApprovalInfoField('Item Name', (e['stockcode'] ?? '').toString()),
-      ApprovalInfoField('QTY Stock Card', (e['qtystock'].toString())),
-      ApprovalInfoField('QTY Adjust To', (e['adjusto'].toString())),
-      ApprovalInfoField('QTY Diff', (ApprovalTheme.currencyFmt.format(e['adjusto'] - e['qtystock'])).toString()),
-      ApprovalInfoField('Current Cost Per Unit', (e['costperunit'].toString())),
-      ApprovalInfoField('New Cost Per Unit', (e['newcost'].toString())),
+      ApprovalInfoField('Item Name', (e['stockname'] ?? e['stocknm'] ?? e['stockcode'] ?? '').toString()),
+      ApprovalInfoField('QTY Stock Card', qtyStock.toStringAsFixed(0)),
+      ApprovalInfoField('QTY Adjust To', adjustTo.toStringAsFixed(0)),
+      ApprovalInfoField('QTY Diff', qtyDiff.toStringAsFixed(0)),
+      ApprovalInfoField('Current Cost Per Unit', ApprovalTheme.currencyFmt.format(cost)),
+      ApprovalInfoField('New Cost Per Unit', ApprovalTheme.currencyFmt.format(newCost)),
+      ApprovalInfoField('Amount', ApprovalTheme.currencyFmt.format(_lineAmount(Map<String, dynamic>.from(e as Map)))),
     ];
   }
   Widget _buildBody() {
@@ -180,7 +197,9 @@ class _StockAdjApp2State extends State<StockAdjApp2> {
       }
       final details = caConfirmData['data']['detail'];
       var total = 0.0;
-      for (var item in details) { total += (item["amount"] as num).toDouble(); }
+      for (var item in details) {
+        total += _lineAmount(Map<String, dynamic>.from(item as Map));
+      }
       if (mounted) { setState(() { dataaa = details; totalPrice = total; }); }
       else { dataaa = details; totalPrice = total; }
 

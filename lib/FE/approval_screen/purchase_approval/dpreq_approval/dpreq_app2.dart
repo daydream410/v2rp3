@@ -205,8 +205,8 @@ class _DpReqApp2State extends State<DpReqApp2> {
       totalPrice = 0;
       inIDR = 0;
       for (var item in dataaa) {
-        totalPrice += item["amount_forex"] as int;
-        inIDR += item["amount_base"];
+        totalPrice += approvalToDouble(item["amount_forex"]);
+        inIDR += approvalToDouble(item["amount_base"]);
       }
 
       // });

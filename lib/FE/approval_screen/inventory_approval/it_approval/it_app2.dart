@@ -44,14 +44,15 @@ class ItApp2 extends StatefulWidget {
 
 class _ItApp2State extends State<ItApp2> {
   var currentDate = "Estimate Arrival Date ";
-  static late List dataaa = <CaConfirmData>[];
+  List<dynamic> dataaa = [];
 
   late Future dataFuture;
 
   @override
   void initState() {
     super.initState();
-
+    dataaa = [];
+    totalPrice = 0;
     dataFuture = getDataa();
   }
 
@@ -62,6 +63,10 @@ class _ItApp2State extends State<ItApp2> {
   bool isVisible = false;
   String reasonValue = '';
   static TextControllers textControllers = Get.put(TextControllers());
+
+  double get _detailTotal => approvalSumLineAmount(
+        dataaa.whereType<Map<dynamic, dynamic>>(),
+      );
 
   static const _statusActions = [
     ApprovalActionMeta(label: 'Pending', icon: Icons.hourglass_empty_rounded, color: Color(0xFF9E9E9E)),
@@ -83,6 +88,7 @@ class _ItApp2State extends State<ItApp2> {
     });
   }
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
+    final amount = approvalLineAmount(e as Map);
     return [
       ApprovalInfoField('SPPBJ No', (e['sppbjno'] ?? '').toString()),
       ApprovalInfoField('Project ID', (e['projectid'] ?? '').toString()),
@@ -92,6 +98,8 @@ class _ItApp2State extends State<ItApp2> {
       ApprovalInfoField('From WH', (e['warehouse'] ?? '').toString()),
       ApprovalInfoField('QTY Req', (e['qty'].toString())),
       ApprovalInfoField('QTY Deliver', (e['qtyrcvd'].toString())),
+      ApprovalInfoField('Price', ApprovalTheme.currencyFmt.format(approvalToDouble(e['harga']))),
+      ApprovalInfoField('Amount', ApprovalTheme.currencyFmt.format(amount)),
       ApprovalInfoField('Remarks', (e['rem'] ?? '').toString()),
     ];
   }
@@ -150,7 +158,7 @@ class _ItApp2State extends State<ItApp2> {
         actionSection: ApprovalActionGrid(actions: _statusActions, selectedLabel: valueStatus, onSelected: _onStatusSelected),
         body: _buildBody(),
         bottomBar: ApprovalDetailBottomBar(
-          totalPrice: totalPrice, itemCount: dataaa.length,
+          totalPrice: _detailTotal, itemCount: dataaa.length,
           selectedAction: hasAction ? valueStatus : null,
           actionColor: hasAction ? ApprovalTheme.primary : null,
           idleHint: 'Select an action to continue',
@@ -182,9 +190,23 @@ class _ItApp2State extends State<ItApp2> {
       final _data = caConfirmData['data'];
       if (_data is Map && _data['header'] is Map) {
       }
-      final details = caConfirmData['data']['detail'];
-      if (mounted) { setState(() => dataaa = details); } else { dataaa = details; }
-      print("dataaa " + dataaa.toString());
+      final data = caConfirmData['data'];
+      final rawDetails =
+          data is Map ? (data['detail'] ?? data['details']) : null;
+      final details = rawDetails is List ? rawDetails : <dynamic>[];
+      final total = approvalSumLineAmount(
+        details.whereType<Map<dynamic, dynamic>>(),
+      );
+      if (mounted) {
+        setState(() {
+          dataaa = details;
+          totalPrice = total;
+        });
+      } else {
+        dataaa = details;
+        totalPrice = total;
+      }
+      print("totalllll  $totalPrice (calc=$total, lines=${details.length})");
       if (mounted) setState(() {});
       return dataaa;
     } catch (e) {

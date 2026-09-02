@@ -214,7 +214,7 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
         //hitung total
         totalPrice = 0;
         for (var item in dataaa) {
-          totalPrice += (item["amount"] as num).toDouble();
+          totalPrice += approvalToDouble(item["amount"]);
         }
       });
       print("totalllll  " + totalPrice.toString());

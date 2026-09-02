@@ -232,12 +232,7 @@ class _PoExApp2State extends State<PoExApp2> {
         dataaa = caConfirmData['data']['details'];
         print("dataaa " + dataaa.toString());
       }
-      var total = 0.0;
-      for (var item in dataaa) {
-        final amount = item['amount'];
-        if (amount != null) total += (amount as num).toDouble();
-      }
-      totalPrice = total;
+      totalPrice = approvalSumField(dataaa, 'amount');
       // print(dTax);
       if (mounted) setState(() {});
       return dataaa;

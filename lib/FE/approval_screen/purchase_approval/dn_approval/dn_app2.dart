@@ -184,8 +184,7 @@ class _DebitNotesApp2State extends State<DebitNotesApp2> {
       if (_data is Map && _data['header'] is Map) {
       }
       final details = caConfirmData['data']['detail'];
-      var total = 0.0;
-      for (var item in details) { total += (item["amount"] as num).toDouble(); }
+      final total = approvalSumField(details, 'amount_forex', fallbackKey: 'amount');
       if (mounted) { setState(() { dataaa = details; totalPrice = total; }); }
       else { dataaa = details; totalPrice = total; }
 

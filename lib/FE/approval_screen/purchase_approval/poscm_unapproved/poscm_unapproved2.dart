@@ -269,9 +269,11 @@ class _PoUnapproved2State extends State<PoUnapproved2> {
       nTTL = 0;
       gTTL = 0;
       for (var item in dataaa) {
-        sTTL += item["harga"] * item["qty"];
+        final qty = approvalToDouble(item["qty"]);
+        final harga = approvalToDouble(item["harga"]);
+        sTTL += harga * qty;
 
-        sTAX += item["taxAmount"];
+        sTAX += approvalToDouble(item["taxAmount"]);
         if (item["tax"] == ':0') {
           dTAX == '0';
           print("dTaxzzzzzzz  " + dTAX.toString());

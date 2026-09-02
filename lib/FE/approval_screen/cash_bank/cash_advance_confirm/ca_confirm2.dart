@@ -191,7 +191,7 @@ class _CashAdvanceConfirm2State extends State<CashAdvanceConfirm2> {
       }
       final details = caConfirmData['data']['detail'];
       var total = 0.0;
-      for (var item in details) { total += (item["amount"] as num).toDouble(); }
+      for (var item in details) { total += approvalToDouble(item["amount"]); }
       if (mounted) { setState(() { dataaa = details; totalPrice = total; }); }
       else { dataaa = details; totalPrice = total; }
 

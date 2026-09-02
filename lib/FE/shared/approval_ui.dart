@@ -93,6 +93,93 @@ String approvalFormatFieldValue(String key, dynamic value) {
   return text.isEmpty ? '-' : text;
 }
 
+/// Converts API numeric values safely; null or invalid → 0.
+double approvalToDouble(dynamic value) {
+  if (value == null) return 0;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString()) ?? 0;
+}
+
+/// Sums [fieldKey] across detail rows; uses [fallbackKey] when primary is null.
+double approvalSumField(
+  Iterable<dynamic> items,
+  String fieldKey, {
+  String? fallbackKey,
+}) {
+  var total = 0.0;
+  for (final item in items) {
+    if (item is! Map) continue;
+    dynamic value = item[fieldKey];
+    if (value == null && fallbackKey != null) {
+      value = item[fallbackKey];
+    }
+    total += approvalToDouble(value);
+  }
+  return total;
+}
+
+/// Sums line amount using `amount_forex` when non-zero, otherwise `amount_base`.
+double approvalSumForexOrBase(Iterable<dynamic> items) {
+  var total = 0.0;
+  for (final item in items) {
+    if (item is! Map) continue;
+    final forex = approvalToDouble(item['amount_forex']);
+    final base = approvalToDouble(item['amount_base']);
+    total += forex != 0 ? forex : base;
+  }
+  return total;
+}
+
+/// Sums line amount using `amount_base` when non-zero, otherwise `amount_forex`.
+double approvalSumBaseOrForex(Iterable<dynamic> items) {
+  var total = 0.0;
+  for (final item in items) {
+    if (item is! Map) continue;
+    final base = approvalToDouble(item['amount_base']);
+    final forex = approvalToDouble(item['amount_forex']);
+    total += base != 0 ? base : forex;
+  }
+  return total;
+}
+
+/// AP Adjustment: sum primary lines only (tipe 0/1), exclude forex offset rows.
+double approvalSumApAdjPrimary(Iterable<dynamic> items) {
+  var total = 0.0;
+  for (final item in items) {
+    if (item is! Map) continue;
+    final tipe = approvalToDouble(item['tipe']).toInt();
+    if (tipe != 0 && tipe != 1) continue;
+    final base = approvalToDouble(item['amount_base']);
+    final forex = approvalToDouble(item['amount_forex']);
+    total += base != 0 ? base : forex;
+  }
+  return total;
+}
+
+String approvalApAdjTypeLabel(dynamic tipe) {
+  final n = approvalToDouble(tipe).toInt();
+  if (n == 0 || n == 1) return 'Account Payable';
+  return 'Other Expenses';
+}
+
+/// Line amount from `amount`, or `qty * harga` when amount is missing.
+double approvalLineAmount(Map<dynamic, dynamic> item) {
+  final amount = item['amount'];
+  if (amount != null) return approvalToDouble(amount);
+  return approvalToDouble(item['qty']) * approvalToDouble(item['harga']);
+}
+
+/// Sums line amounts across detail rows.
+double approvalSumLineAmount(Iterable<dynamic> items) {
+  var total = 0.0;
+  for (final item in items) {
+    if (item is Map) {
+      total += approvalLineAmount(item);
+    }
+  }
+  return total;
+}
+
 List<ApprovalInfoField> approvalFieldsFromRecord(
   dynamic record, {
   List<String>? priorityKeys,
@@ -2437,6 +2524,8 @@ class ApprovalDetailBottomBar extends StatelessWidget {
   final String submitLabel;
   final VoidCallback? onSubmit;
   final String idleHint;
+  final String totalLabel;
+  final bool quantityTotal;
 
   const ApprovalDetailBottomBar({
     super.key,
@@ -2447,6 +2536,8 @@ class ApprovalDetailBottomBar extends StatelessWidget {
     this.submitLabel = 'Submit',
     this.onSubmit,
     this.idleHint = 'Select an action to continue',
+    this.totalLabel = 'Total Amount',
+    this.quantityTotal = false,
   });
 
   bool get _hasAction =>
@@ -2458,6 +2549,9 @@ class ApprovalDetailBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = actionColor ?? ApprovalTheme.primary;
     final fmt = ApprovalTheme.currencyFmt;
+    final totalText = quantityTotal
+        ? NumberFormat('#,##0.##').format(totalPrice)
+        : fmt.format(totalPrice);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -2506,7 +2600,7 @@ class ApprovalDetailBottomBar extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Text('Total Amount',
+                            Text(totalLabel,
                                 style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.grey.shade500,
@@ -2528,7 +2622,7 @@ class ApprovalDetailBottomBar extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 1),
-                        Text(fmt.format(totalPrice),
+                        Text(totalText,
                             style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,

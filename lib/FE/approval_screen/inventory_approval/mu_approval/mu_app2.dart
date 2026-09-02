@@ -76,9 +76,10 @@ class _MuApp2State extends State<MuApp2> {
     });
   }
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
+    final amount = approvalLineAmount(e as Map);
     return [
       ApprovalInfoField('SPPBJ No', (e['sppbjno'] ?? '').toString()),
-      ApprovalInfoField('Project Name', (e['projectid'] ?? '').toString()),
+      ApprovalInfoField('Project Name', (e['projectname'] ?? e['projectid'] ?? '').toString()),
       ApprovalInfoField('Stock ID', (e['stockcode'] ?? '').toString()),
       ApprovalInfoField('Desc', (e['ket'] ?? '').toString()),
       ApprovalInfoField('Unit', (e['unit'] ?? '').toString()),
@@ -86,6 +87,8 @@ class _MuApp2State extends State<MuApp2> {
       ApprovalInfoField('WH Name', (e['warehousename'] ?? '').toString()),
       ApprovalInfoField('QTY Req', (e['qty'].toString())),
       ApprovalInfoField('QTY Realize', (e['qtyrcvd'].toString())),
+      ApprovalInfoField('Price', ApprovalTheme.currencyFmt.format(approvalToDouble(e['harga']))),
+      ApprovalInfoField('Amount', ApprovalTheme.currencyFmt.format(amount)),
       ApprovalInfoField('Remarks', (e['rem'] ?? '').toString()),
     ];
   }
@@ -178,7 +181,16 @@ class _MuApp2State extends State<MuApp2> {
       if (_data is Map && _data['header'] is Map) {
       }
       final details = caConfirmData['data']['detail'];
-      if (mounted) { setState(() => dataaa = details); } else { dataaa = details; }
+      final total = approvalSumLineAmount(details);
+      if (mounted) {
+        setState(() {
+          dataaa = details;
+          totalPrice = total;
+        });
+      } else {
+        dataaa = details;
+        totalPrice = total;
+      }
 
       print("totalllll  " + totalPrice.toString());
       print("dataaa " + dataaa.toString());

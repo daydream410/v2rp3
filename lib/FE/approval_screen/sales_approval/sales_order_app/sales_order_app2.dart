@@ -209,7 +209,7 @@ class _SalesOrderApproval2State extends State<SalesOrderApproval2> {
       //hitung total
       totalPrice = 0.0;
       for (var item in dataaa) {
-        totalPrice += item["amount"];
+        totalPrice += approvalToDouble(item["amount"]);
       }
 
       // });

@@ -39,14 +39,15 @@ class ApAdjApp2 extends StatefulWidget {
 }
 
 class _ApAdjApp2State extends State<ApAdjApp2> {
-  static late List dataaa = <CaConfirmData>[];
+  List<dynamic> dataaa = [];
 
   late Future dataFuture;
 
   @override
   void initState() {
     super.initState();
-
+    dataaa = [];
+    totalPrice = 0;
     dataFuture = getDataa();
   }
 
@@ -57,6 +58,8 @@ class _ApAdjApp2State extends State<ApAdjApp2> {
   bool isVisible = false;
   String reasonValue = '';
   static TextControllers textControllers = Get.put(TextControllers());
+
+  double get _detailTotal => approvalSumApAdjPrimary(dataaa);
 
   static const _statusActions = [
     ApprovalActionMeta(label: 'Pending', icon: Icons.hourglass_empty_rounded, color: Color(0xFF9E9E9E)),
@@ -79,12 +82,12 @@ class _ApAdjApp2State extends State<ApAdjApp2> {
     return [
       ApprovalInfoField('A/P Type', (e['ap_type'] ?? '').toString()),
       ApprovalInfoField('Supplier Name', (e['supplier_id'] ?? '').toString()),
-      ApprovalInfoField('Type', (e['tipe'] == 0 ? 'Account Payable' : 'Other Expenses').toString()),
+      ApprovalInfoField('Type', approvalApAdjTypeLabel(e['tipe'])),
       ApprovalInfoField('Invoice No', (e['docno'] ?? '').toString()),
       ApprovalInfoField('Desc', (e['ket'] ?? '').toString()),
       ApprovalInfoField('CCY', (e['ccy'] ?? '').toString()),
-      ApprovalInfoField('in FOREX', (ApprovalTheme.currencyFmt.format(e['amount_forex'])).toString()),
-      ApprovalInfoField('in IDR', (ApprovalTheme.currencyFmt.format(e['amount_base'])).toString()),
+      ApprovalInfoField('in FOREX', ApprovalTheme.currencyFmt.format(approvalToDouble(e['amount_forex']))),
+      ApprovalInfoField('in IDR', ApprovalTheme.currencyFmt.format(approvalToDouble(e['amount_base']))),
     ];
   }
   Widget _buildBody() {
@@ -141,7 +144,7 @@ class _ApAdjApp2State extends State<ApAdjApp2> {
         actionSection: ApprovalActionGrid(actions: _statusActions, selectedLabel: valueStatus, onSelected: _onStatusSelected),
         body: _buildBody(),
         bottomBar: ApprovalDetailBottomBar(
-          totalPrice: totalPrice, itemCount: dataaa.length,
+          totalPrice: _detailTotal, itemCount: dataaa.length,
           selectedAction: hasAction ? valueStatus : null,
           actionColor: hasAction ? ApprovalTheme.primary : null,
           idleHint: 'Select an action to continue',
@@ -176,14 +179,22 @@ class _ApAdjApp2State extends State<ApAdjApp2> {
       final _data = caConfirmData['data'];
       if (_data is Map && _data['header'] is Map) {
       }
-      final details = caConfirmData['data']['detail'];
-      var total = 0.0;
-      for (var item in details) { total += (item["amount_forex"] as num).toDouble(); }
-      if (mounted) { setState(() { dataaa = details; totalPrice = total; }); }
-      else { dataaa = details; totalPrice = total; }
+      final data = caConfirmData['data'];
+      final rawDetails =
+          data is Map ? (data['detail'] ?? data['details']) : null;
+      final details = rawDetails is List ? rawDetails : <dynamic>[];
+      final total = approvalSumApAdjPrimary(details);
+      if (mounted) {
+        setState(() {
+          dataaa = details;
+          totalPrice = total;
+        });
+      } else {
+        dataaa = details;
+        totalPrice = total;
+      }
 
-      // });
-      print("totalllll  " + totalPrice.toString());
+      print("totalllll  $totalPrice (calc=$total, lines=${details.length})");
       print("dataaa " + dataaa.toString());
       if (mounted) setState(() {});
       return dataaa;

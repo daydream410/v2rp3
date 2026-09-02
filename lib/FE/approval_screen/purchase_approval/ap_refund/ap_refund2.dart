@@ -196,8 +196,8 @@ class _ApRefundApp2State extends State<ApRefundApp2> {
       totalPrice = 0;
       totalInIDR = 0;
       for (var item in dataaa) {
-        totalPrice += item["amount_forex"] as int;
-        totalInIDR += item["amount_base"] as int;
+        totalPrice += approvalToDouble(item["amount_forex"]);
+        totalInIDR += approvalToDouble(item["amount_base"]);
       }
 
       // });

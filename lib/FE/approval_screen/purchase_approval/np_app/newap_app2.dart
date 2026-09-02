@@ -211,9 +211,9 @@ class _NpApp2State extends State<NpApp2> {
       nTTL = 0;
       gTTL = 0;
       for (var item in dataaa) {
-        sTTL += item["amount_forex"];
+        sTTL += approvalToDouble(item["amount_forex"]);
         // dTTL += item["disc"] * (item["qty"] * item["harga"]) / 100;
-        sTAX += item["taxAmount"];
+        sTAX += approvalToDouble(item["taxAmount"]);
         if (item["tax"] == ':0') {
           dTAX == '0';
           print("dTaxzzzzzzz  " + dTAX.toString());

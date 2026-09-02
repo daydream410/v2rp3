@@ -175,9 +175,9 @@ class _StockPriceApp2State extends State<StockPriceApp2> {
       totalStock = 0;
       totalCogs = 0;
       for (var item in dataaa) {
-        totalDiff += item['amountap'] - item['qtamountgr'];
-        totalStock += item['astock'];
-        totalCogs += item['aexpend'];
+        totalDiff += approvalToDouble(item['amountap']) - approvalToDouble(item['qtamountgr']);
+        totalStock += approvalToDouble(item['astock']);
+        totalCogs += approvalToDouble(item['aexpend']);
       }
 
       // });

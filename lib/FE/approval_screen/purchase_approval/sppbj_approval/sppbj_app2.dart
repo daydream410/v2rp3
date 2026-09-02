@@ -208,7 +208,7 @@ class _SppbjApp2State extends State<SppbjApp2> {
       totalPrice = 0;
       for (var item in dataaa) {
         // totalPrice += item["amount"] as int;
-        totalPrice += item["amount"];
+        totalPrice += approvalToDouble(item["amount"]);
       }
 
       // });

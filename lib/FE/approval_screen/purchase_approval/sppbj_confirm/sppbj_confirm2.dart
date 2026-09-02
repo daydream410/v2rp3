@@ -183,7 +183,7 @@ class _SppbjConfirm2State extends State<SppbjConfirm2> {
       //hitung total
       totalPrice = 0;
       for (var item in dataaa) {
-        totalPrice += item["amount"];
+        totalPrice += approvalToDouble(item["amount"]);
       }
 
       // });
