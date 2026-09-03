@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/BE/controller.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -237,6 +238,7 @@ class _StockTopupApp2State extends State<StockTopupApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

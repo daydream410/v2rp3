@@ -18,6 +18,7 @@ import '../../../../BE/reqip.dart';
 import '../../../../main.dart';
 import '../../../../BE/resD.dart';
 import 'package:v2rp3/BE/controller.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../routes/api_name.dart';
 
@@ -232,6 +233,7 @@ class _MrApp2State extends State<MrApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

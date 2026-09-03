@@ -17,6 +17,7 @@ import 'package:v2rp3/routes/api_name.dart';
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
 import 'package:v2rp3/BE/controller.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../main.dart';
 import 'gr_app.dart';
@@ -270,6 +271,7 @@ class _GrApp2State extends State<GrApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

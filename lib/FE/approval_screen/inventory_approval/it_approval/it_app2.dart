@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/FE/approval_screen/inventory_approval/it_approval/it_app.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 // import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
@@ -262,6 +263,7 @@ class _ItApp2State extends State<ItApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

@@ -17,6 +17,7 @@ import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/BE/controller.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -96,6 +97,8 @@ class _PoExApp2State extends State<PoExApp2> {
       ApprovalInfoField('Disc', ('${double.parse(e['disc']) / 100}%').toString()),
       ApprovalInfoField('Tax', (ApprovalTheme.currencyFmt.format(double.parse( e['taxAmount'].toString())))),
       ApprovalInfoField('Total', (ApprovalTheme.currencyFmt.format(double.parse(e['qty']) * double.parse(e['harga']) + double.parse( e['taxAmount'].toString())))),
+      ApprovalInfoField('Budget Avail', (ApprovalTheme.currencyFmt.format(approvalBudgetAvailable(e)))),
+      ApprovalInfoField('Project', (e['projectname'] ?? e['projectid'] ?? '').toString()),
     ];
   }
   Widget _buildBody() {
@@ -166,6 +169,12 @@ class _PoExApp2State extends State<PoExApp2> {
           fields: [
             ApprovalInfoField('Project', widget.projectid ?? '-'),
             ApprovalInfoField('Request By', widget.requestor ?? '-'),
+            ApprovalInfoField(
+              'Budget Available',
+              ApprovalTheme.currencyFmt.format(
+                approvalToDouble(widget.budgetavailable),
+              ),
+            ),
           ],
         ),
         actionSection: hasSelection ? ApprovalActionGrid(
@@ -318,6 +327,7 @@ class _PoExApp2State extends State<PoExApp2> {
         });
       }
       if (status == true) {
+        approvalRefreshMenuCounts();
         QuickAlert.show(
             context: context,
             type: QuickAlertType.success,

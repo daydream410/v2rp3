@@ -14,6 +14,7 @@ import 'package:v2rp3/FE/approval_screen/inventory_approval/sm_approval/sm_app.d
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -136,7 +137,10 @@ class _SmApp2State extends State<SmApp2> {
         actionSection: ApprovalActionGrid(actions: _statusActions, selectedLabel: valueStatus, onSelected: _onStatusSelected),
         body: _buildBody(),
         bottomBar: ApprovalDetailBottomBar(
-          totalPrice: totalPrice, itemCount: dataaa.length,
+          totalPrice: totalPrice,
+          totalLabel: 'Total QTY Rcvd',
+          quantityTotal: true,
+          itemCount: dataaa.length,
           selectedAction: hasAction ? valueStatus : null,
           actionColor: hasAction ? ApprovalTheme.primary : null,
           idleHint: 'Select an action to continue',
@@ -172,16 +176,18 @@ class _SmApp2State extends State<SmApp2> {
       if (_data is Map && _data['header'] is Map) {
       }
       final details = caConfirmData['data']['detail'];
-      if (mounted) { setState(() => dataaa = details); } else { dataaa = details; }
+      final total = approvalSumField(details, 'rcvd', fallbackKey: 'qty');
+      if (mounted) {
+        setState(() {
+          dataaa = details;
+          totalPrice = total;
+        });
+      } else {
+        dataaa = details;
+        totalPrice = total;
+      }
 
-      // //hitung total
-      // totalPrice = 0;
-      // for (var item in dataaa) {
-      //   totalPrice += item["amount"] as int;
-      // }
-
-      // // });
-      // print("totalllll  " + totalPrice.toString());
+      print("totalllll  " + totalPrice.toString());
       print("dataaa " + dataaa.toString());
       if (mounted) setState(() {});
       return dataaa;
@@ -239,6 +245,7 @@ class _SmApp2State extends State<SmApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

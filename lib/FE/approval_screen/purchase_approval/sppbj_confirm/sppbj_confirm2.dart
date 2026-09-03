@@ -15,6 +15,7 @@ import 'package:v2rp3/FE/approval_screen/purchase_approval/sppbj_confirm/sppbj_c
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -242,6 +243,7 @@ class _SppbjConfirm2State extends State<SppbjConfirm2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           reffno = response['data']['reffno'];
           message = response['data']['message'];

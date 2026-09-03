@@ -16,6 +16,7 @@ import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/BE/controller.dart';
 import 'package:v2rp3/routes/api_name.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -83,7 +84,8 @@ class _CaSettleConfirm2State extends State<CaSettleConfirm2> {
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
     return [
       ApprovalInfoField('Request By', (e['requestorname'] ?? '').toString()),
-      ApprovalInfoField('Project Name', (e['projectname'] ?? '').toString()),
+      ApprovalInfoField('Project Name', approvalProjectName(e)),
+      ApprovalInfoField('Project ID', approvalProjectId(e)),
       ApprovalInfoField('Item/ Acc No', (e['itemcoa'] ?? '').toString()),
       ApprovalInfoField('Item/Acc Name', approvalAccountName(e)),
       ApprovalInfoField('Desc', (e['ket'] ?? '').toString()),
@@ -243,6 +245,7 @@ class _CaSettleConfirm2State extends State<CaSettleConfirm2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           reffno = response['data']['reffno'];
           message = response['data']['message'];

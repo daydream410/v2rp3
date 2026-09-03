@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 // import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -84,7 +85,8 @@ class _CashAdvanceConfirm2State extends State<CashAdvanceConfirm2> {
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
     return [
       ApprovalInfoField('Request By', (e['requestorname'] ?? '').toString()),
-      ApprovalInfoField('Project Name', (e['projectname'] ?? '').toString()),
+      ApprovalInfoField('Project Name', approvalProjectName(e)),
+      ApprovalInfoField('Project ID', approvalProjectId(e)),
       ApprovalInfoField('Item/ Acc No', (e['itemcoa'] ?? '').toString()),
       ApprovalInfoField('Item/Acc Name', approvalAccountName(e)),
       ApprovalInfoField('Desc', (e['ket'] ?? '').toString()),
@@ -249,6 +251,7 @@ class _CashAdvanceConfirm2State extends State<CashAdvanceConfirm2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

@@ -15,6 +15,7 @@ import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/BE/controller.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -94,6 +95,16 @@ class _PoScmApp2State extends State<PoScmApp2> {
       else if (status == "Send To Draft") { updstatus = "-9"; isVisible = true; }
     });
   }
+  List<ApprovalInfoField> _itemTableFields(dynamic e) {
+    return [
+      ApprovalInfoField('Item Name', (e['itemname'] ?? '').toString()),
+      ApprovalInfoField('QTY', (e['qty'].toString())),
+      ApprovalInfoField('Price/ Unit', (ApprovalTheme.currencyFmt.format(e['harga'])).toString()),
+      ApprovalInfoField('Disc', ('${e['disc']}%').toString()),
+      ApprovalInfoField('Total', (ApprovalTheme.currencyFmt.format((e['qty'] * e['harga']) * (100 - e['disc']) / 100 + e['taxAmount'])).toString()),
+    ];
+  }
+
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
     return [
       ApprovalInfoField('SPPBJ No', (e['sppbjno'] ?? '').toString()),
@@ -126,6 +137,10 @@ class _PoScmApp2State extends State<PoScmApp2> {
         return ApprovalDetailItemsColumn(
           count: dataaa.length,
           tableRows: [
+            for (var i = 0; i < dataaa.length; i++)
+              _itemTableFields(dataaa[i]),
+          ],
+          detailRows: [
             for (var i = 0; i < dataaa.length; i++)
               _itemDetailFields(dataaa[i]),
           ],
@@ -318,6 +333,7 @@ class _PoScmApp2State extends State<PoScmApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           reffno = response['data']['reffno'];
           message = response['data']['message'];

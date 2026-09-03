@@ -19,6 +19,7 @@ import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
 import '../../../../main.dart';
 import 'package:v2rp3/BE/controller.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 class ItStockAdjApp2 extends StatefulWidget {
   final seckey;
@@ -264,6 +265,7 @@ class _ItStockAdjApp2State extends State<ItStockAdjApp2> {
           messageError = response['message'];
         });
         if (status == true) {
+        approvalRefreshMenuCounts();
           setState(() {
             message = response['data']['message'];
           });
@@ -323,6 +325,7 @@ class _ItStockAdjApp2State extends State<ItStockAdjApp2> {
           messageError = response['message'];
         });
         if (status == true) {
+        approvalRefreshMenuCounts();
           setState(() {
             message = response['data']['message'];
           });

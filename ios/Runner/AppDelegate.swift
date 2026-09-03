@@ -23,7 +23,7 @@ import UserNotifications
     Messaging.messaging().delegate = self
     print("✅ [iOS] Firebase Messaging delegate set")
     
-    // Request notification permissions
+    // Delegate must be set before permission request; Flutter side also requests permission.
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self
       let authOptions: UNAuthorizationOptions = [.alert, .badge, .sound]
@@ -35,17 +35,19 @@ import UserNotifications
           } else {
             print("✅ [iOS] Notification permission granted: \(granted)")
           }
+          DispatchQueue.main.async {
+            application.registerForRemoteNotifications()
+            print("✅ [iOS] Registered for remote notifications (after permission)")
+          }
         }
       )
     } else {
       let settings: UIUserNotificationSettings =
         UIUserNotificationSettings(types: [.alert, .badge, .sound], categories: nil)
       application.registerUserNotificationSettings(settings)
+      application.registerForRemoteNotifications()
+      print("✅ [iOS] Registered for remote notifications")
     }
-    
-    // Register for remote notifications
-    application.registerForRemoteNotifications()
-    print("✅ [iOS] Registered for remote notifications")
     
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -72,6 +74,15 @@ import UserNotifications
                             didFailToRegisterForRemoteNotificationsWithError error: Error) {
     print("❌ [APNS] Failed to register for remote notifications: \(error.localizedDescription)")
   }
+
+  // Required when FirebaseAppDelegateProxyEnabled is false.
+  override func application(_ application: UIApplication,
+                            didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                            fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+    print("🔔 [iOS] didReceiveRemoteNotification: \(userInfo)")
+    Messaging.messaging().appDidReceiveMessage(userInfo)
+    super.application(application, didReceiveRemoteNotification: userInfo, fetchCompletionHandler: completionHandler)
+  }
   
   // MARK: - UNUserNotificationCenterDelegate
   
@@ -83,13 +94,9 @@ import UserNotifications
     
     print("🔔 [iOS] Notification received in foreground")
     print("🔔 [iOS] UserInfo: \(userInfo)")
-    
-    // Show notification even when app is in foreground
-    if #available(iOS 14.0, *) {
-      completionHandler([[.banner, .badge, .sound]])
-    } else {
-      completionHandler([[.alert, .badge, .sound]])
-    }
+
+    // Forward to Flutter/Firebase plugins first (FirebaseAppDelegateProxyEnabled=false).
+    super.userNotificationCenter(center, willPresent: notification, withCompletionHandler: completionHandler)
   }
   
   // Handle notification tap
@@ -100,11 +107,8 @@ import UserNotifications
     
     print("🔔 [iOS] Notification tapped")
     print("🔔 [iOS] UserInfo: \(userInfo)")
-    
-    // Handle notification tap and navigation here if needed
-    // The Flutter side will also handle this via FirebaseMessaging.onMessageOpenedApp
-    
-    completionHandler()
+
+    super.userNotificationCenter(center, didReceive: response, withCompletionHandler: completionHandler)
   }
 }
 

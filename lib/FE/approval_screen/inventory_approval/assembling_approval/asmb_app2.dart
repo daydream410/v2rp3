@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:v2rp3/utils/hex_color.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 // import 'package:data_table_2/data_table_2.dart';
 import 'package:intl/intl.dart';
 import 'package:quickalert/quickalert.dart';
@@ -30,6 +31,8 @@ class AssemblingApp2 extends StatefulWidget {
   final item;
   final location;
   final ket;
+  final qty;
+  final estAmount;
 
   AssemblingApp2({
     Key? key,
@@ -42,6 +45,8 @@ class AssemblingApp2 extends StatefulWidget {
     required this.item,
     required this.location,
     required this.ket,
+    required this.qty,
+    required this.estAmount,
   }) : super(key: key);
 
   @override
@@ -56,6 +61,7 @@ class _AssemblingApp2State extends State<AssemblingApp2> {
   @override
   void initState() {
     super.initState();
+    totalPrice = approvalToDouble(widget.estAmount);
   }
 
   var valueChooseRequest = "";
@@ -95,6 +101,11 @@ class _AssemblingApp2State extends State<AssemblingApp2> {
           ApprovalInfoField('Item', widget.item?.toString() ?? '-'),
           ApprovalInfoField('Supplier', widget.supplier?.toString() ?? '-'),
           ApprovalInfoField('Location', widget.location?.toString() ?? '-'),
+          ApprovalInfoField('QTY', widget.qty?.toString() ?? '-'),
+          ApprovalInfoField(
+            'Est. Amount',
+            ApprovalTheme.currencyFmt.format(approvalToDouble(widget.estAmount)),
+          ),
           ApprovalInfoField('Est. Date', _formattedEstDate),
           ApprovalInfoField('Request By', widget.requestor?.toString() ?? '-'),
         ],
@@ -229,6 +240,7 @@ class _AssemblingApp2State extends State<AssemblingApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

@@ -17,6 +17,7 @@ import 'dart:io';
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
 import '../../../../main.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 class StockPriceApp2 extends StatefulWidget {
   final seckey;
@@ -239,6 +240,7 @@ class _StockPriceApp2State extends State<StockPriceApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

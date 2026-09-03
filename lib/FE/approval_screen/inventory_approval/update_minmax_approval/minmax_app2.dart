@@ -18,6 +18,7 @@ import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
 import '../../../../BE/controller.dart';
 import '../../../../main.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 class UpdateMinMaxApp2 extends StatefulWidget {
   final seckey;
@@ -233,6 +234,7 @@ class _UpdateMinMaxApp2State extends State<UpdateMinMaxApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

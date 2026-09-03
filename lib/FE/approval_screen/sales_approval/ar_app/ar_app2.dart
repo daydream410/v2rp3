@@ -10,6 +10,7 @@ import 'package:data_table_2/data_table_2.dart';
 import 'package:intl/intl.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 // import 'package:v2rp3/BE/controller.dart';
 import 'package:v2rp3/FE/approval_screen/sales_approval/ar_app/ar_app.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
@@ -265,6 +266,7 @@ class _ArApproval2State extends State<ArApproval2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           reffno = response['data']['reffno'];
           message = response['data']['message'];

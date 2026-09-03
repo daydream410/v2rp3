@@ -15,6 +15,7 @@ import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/BE/controller.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -85,6 +86,7 @@ class _ApAdjApp2State extends State<ApAdjApp2> {
       ApprovalInfoField('Type', approvalApAdjTypeLabel(e['tipe'])),
       ApprovalInfoField('Invoice No', (e['docno'] ?? '').toString()),
       ApprovalInfoField('Desc', (e['ket'] ?? '').toString()),
+      ApprovalInfoField('Project ID', (e['projectid'] ?? '').toString()),
       ApprovalInfoField('CCY', (e['ccy'] ?? '').toString()),
       ApprovalInfoField('in FOREX', ApprovalTheme.currencyFmt.format(approvalToDouble(e['amount_forex']))),
       ApprovalInfoField('in IDR', ApprovalTheme.currencyFmt.format(approvalToDouble(e['amount_base']))),
@@ -249,6 +251,7 @@ class _ApAdjApp2State extends State<ApAdjApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

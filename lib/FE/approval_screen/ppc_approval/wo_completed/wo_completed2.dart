@@ -16,6 +16,7 @@ import 'package:http/http.dart' as http;
 import 'package:v2rp3/routes/api_name.dart';
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 // import 'package:v2rp3/BE/controller.dart';
 
 import '../../../../main.dart';
@@ -66,11 +67,190 @@ class _WoCompleted2State extends State<WoCompleted2> {
   void initState() {
     super.initState();
 
-    // Reset date input every time page is opened
+    // Reset form every time page is opened
     fromdate.value.text = '';
+    valueStatus = '';
+    valueWo = '';
 
     dataFuture = getDataa();
     getWoAcc();
+  }
+
+  bool get _dateSelected => fromdate.value.text.isNotEmpty;
+
+  bool get _canSubmit {
+    if (!_dateSelected || valueStatus.isEmpty) return false;
+    return allDetailCompleted || (valueStatus == '-1' && dataaa.isEmpty);
+  }
+
+  String get _submitIdleHint {
+    if (!_dateSelected) return 'Select closing date to continue';
+    if (valueStatus.isEmpty) return 'Select Capitalized or Expended';
+    if (valueStatus == '1' && valueWo.isEmpty) {
+      return 'Select Posted to Account';
+    }
+    if (!_canSubmit) return 'All detail items must be Completed';
+    return 'Tap submit to complete work order';
+  }
+
+  void _handleSubmit() {
+    if (!_dateSelected) {
+      QuickAlert.show(
+        context: context,
+        type: QuickAlertType.warning,
+        title: 'Peringatan',
+        text: 'Pilih tanggal terlebih dahulu!',
+      );
+      return;
+    }
+    if (valueStatus.isEmpty) {
+      QuickAlert.show(
+        context: context,
+        type: QuickAlertType.warning,
+        title: 'Peringatan',
+        text: 'Pilih tipe Capitalized atau Expended!',
+      );
+      return;
+    }
+    if (valueStatus == '1' && valueWo.isEmpty) {
+      QuickAlert.show(
+        context: context,
+        type: QuickAlertType.warning,
+        title: 'Peringatan',
+        text: 'Pilih Posted to Account terlebih dahulu!',
+      );
+      return;
+    }
+    if (!_canSubmit) return;
+    sendConfirm();
+  }
+
+  Widget _buildCompletionStep() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Complete Work Order',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text('Closing Date',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+          const SizedBox(height: 4),
+          TextField(
+            controller: fromdate.value,
+            readOnly: true,
+            onTap: selectDateFrom,
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Select date',
+              prefixIcon: Icon(Icons.calendar_today_outlined,
+                  size: 18, color: ApprovalTheme.primary),
+              filled: true,
+              fillColor: ApprovalTheme.background,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+            ),
+          ),
+          if (_dateSelected) ...[
+            const SizedBox(height: 12),
+            Text('Type',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+            Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<String>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Capitalized', style: TextStyle(fontSize: 13)),
+                    value: '1',
+                    groupValue: valueStatus,
+                    activeColor: ApprovalTheme.primary,
+                    onChanged: (val) {
+                      setState(() {
+                        valueStatus = val!;
+                        valueWo = '';
+                      });
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: RadioListTile<String>(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Expended', style: TextStyle(fontSize: 13)),
+                    value: '-1',
+                    groupValue: valueStatus,
+                    activeColor: ApprovalTheme.primary,
+                    onChanged: (val) {
+                      setState(() {
+                        valueStatus = val!;
+                        valueWo = '';
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            if (valueStatus == '1') ...[
+              const SizedBox(height: 4),
+              Text('Posted to Account',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+              const SizedBox(height: 4),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: valueWo.isNotEmpty ? valueWo : null,
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: ApprovalTheme.background,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                ),
+                hint: const Text('Select account'),
+                items: listWoAcc.map<DropdownMenuItem<String>>((item) {
+                  final ket = item['ket']?.toString() ?? '';
+                  return DropdownMenuItem<String>(
+                    value: ket,
+                    child: Text(ket, overflow: TextOverflow.ellipsis),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  setState(() => valueWo = val ?? '');
+                },
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
   }
 
   String reasonValue = '';
@@ -100,30 +280,41 @@ class _WoCompleted2State extends State<WoCompleted2> {
     ];
   }
   Widget _buildBody() {
-    return FutureBuilder(
-      future: dataFuture,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Error Loading Data', style: TextStyle(color: Colors.grey.shade500)));
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator(color: ApprovalTheme.primary));
-        }
-        return ApprovalDetailItemsColumn(
-          count: dataaa.length,
-          tableRows: [
-            for (var i = 0; i < dataaa.length; i++)
-              _itemDetailFields(dataaa[i]),
-          ],
-          children: const [],
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildCompletionStep(),
+        Expanded(
+          child: FutureBuilder(
+            future: dataFuture,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Center(
+                    child: Text('Error Loading Data',
+                        style: TextStyle(color: Colors.grey.shade500)));
+              }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Center(
+                    child: CircularProgressIndicator(color: ApprovalTheme.primary));
+              }
+              return ApprovalDetailItemsColumn(
+                count: dataaa.length,
+                tableRows: [
+                  for (var i = 0; i < dataaa.length; i++)
+                    _itemDetailFields(dataaa[i]),
+                ],
+                children: const [],
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasAction = true;
+    final hasAction = _canSubmit;
     return WillPopScope(
       onWillPop: () async {
         final shouldPop = await showDialog<bool>(
@@ -154,11 +345,12 @@ class _WoCompleted2State extends State<WoCompleted2> {
         actionSection: null,
         body: _buildBody(),
         bottomBar: ApprovalDetailBottomBar(
-          totalPrice: totalPrice, itemCount: dataaa.length,
-          selectedAction: hasAction ? 'Submit' : null,
+          totalPrice: totalPrice,
+          itemCount: dataaa.length,
+          selectedAction: hasAction ? 'Complete' : null,
           actionColor: hasAction ? ApprovalTheme.primary : null,
-          idleHint: 'Tap submit to continue',
-          onSubmit: () { sendConfirm(); },
+          idleHint: _submitIdleHint,
+          onSubmit: hasAction ? _handleSubmit : null,
         ),
       ),
     );
@@ -337,6 +529,7 @@ class _WoCompleted2State extends State<WoCompleted2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

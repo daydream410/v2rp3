@@ -53,6 +53,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print('🔔 [FCM:BACKGROUND] Data: ${message.data}');
   print(
       '🔔 [FCM:BACKGROUND] Notification: ${message.notification?.title} | ${message.notification?.body}');
+
+  // iOS does not auto-display data-only messages in background; show locally.
+  if (Platform.isIOS &&
+      (message.notification != null || message.data.isNotEmpty)) {
+    await initializeNotifications();
+    await _showFcmLocalNotification(message);
+  }
 }
 
 // Local notifications plugin
@@ -415,7 +422,7 @@ Future<String?> getAndSaveFcmToken() async {
       if (apnsToken == null) {
         print('⏳ [FCM:TOKEN] APNS token not available yet, waiting...');
         int retryCount = 0;
-        const maxRetries = 5;
+        const maxRetries = 10;
 
         while (apnsToken == null && retryCount < maxRetries) {
           await Future.delayed(const Duration(seconds: 2));
@@ -500,6 +507,43 @@ Future<void> initializeNotifications() async {
       ?.createNotificationChannel(channel);
 }
 
+Future<void> _showFcmLocalNotification(RemoteMessage message) async {
+  final normalized = _normalizeFcmPayload(message.data);
+  final String payload = jsonEncode(normalized);
+  final String title =
+      message.notification?.title ?? message.data['title']?.toString() ?? 'V2RP';
+  final String body = message.notification?.body ??
+      message.data['body']?.toString() ??
+      jsonEncode(message.data);
+
+  await flutterLocalNotificationsPlugin.show(
+    message.hashCode,
+    title,
+    body,
+    NotificationDetails(
+      android: AndroidNotificationDetails(
+        'high_importance_channel',
+        'High Importance Notifications',
+        channelDescription: 'This channel is used for important notifications.',
+        importance: Importance.high,
+        priority: Priority.high,
+        color: const Color(0xFFF4A62A),
+        colorized: true,
+        styleInformation: BigTextStyleInformation(
+          body,
+          contentTitle: title,
+        ),
+      ),
+      iOS: const DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+    ),
+    payload: payload,
+  );
+}
+
 // Initialize Firebase and FCM in background (non-blocking)
 Future<void> _initializeFirebaseAndFCM() async {
   print('🚀 [FCM:INIT] Starting Firebase and FCM initialization...');
@@ -552,6 +596,15 @@ Future<void> _initializeFirebaseAndFCM() async {
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       print('✅ [FCM:INIT] User granted notification permission');
+
+      if (Platform.isIOS) {
+        await messaging.setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        print('✅ [FCM:INIT] iOS foreground presentation options set');
+      }
 
       // Get and save FCM token with timeout
       print('🚀 [FCM:INIT] Step 5: Getting FCM token...');
@@ -607,52 +660,7 @@ Future<void> _initializeFirebaseAndFCM() async {
           print(
               '🔔 [FCM:onMessage] Showing local notification for incoming FCM');
 
-          // Prepare payload for navigation
-          final normalized = _normalizeFcmPayload(message.data);
-          String payload = jsonEncode(normalized);
-          print('🔔 [FCM:onMessage] Normalized payload: $payload');
-
-          final String title =
-              message.notification?.title ?? message.data['title'] ?? 'V2RP';
-          final String body = message.notification?.body ??
-              message.data['body'] ??
-              jsonEncode(message.data);
-
-          print('🔔 [FCM:onMessage] Notification title: $title');
-          print('🔔 [FCM:onMessage] Notification body: $body');
-
-          // Show local notification when app is in foreground with the same
-          // primary color used by the approval screen (#F4A62A) so the
-          // notification visuals stay on-brand.
-          flutterLocalNotificationsPlugin
-              .show(
-            message.hashCode,
-            title,
-            body,
-            NotificationDetails(
-              android: AndroidNotificationDetails(
-                'high_importance_channel',
-                'High Importance Notifications',
-                channelDescription:
-                    'This channel is used for important notifications.',
-                importance: Importance.high,
-                priority: Priority.high,
-                color: const Color(0xFFF4A62A),
-                colorized: true,
-                styleInformation: BigTextStyleInformation(
-                  body,
-                  contentTitle: title,
-                ),
-              ),
-              iOS: const DarwinNotificationDetails(
-                presentAlert: true,
-                presentBadge: true,
-                presentSound: true,
-              ),
-            ),
-            payload: payload,
-          )
-              .then((_) {
+          _showFcmLocalNotification(message).then((_) {
             print('✅ [FCM:onMessage] Local notification shown successfully');
           }).catchError((error) {
             print('❌ [FCM:onMessage] Error showing local notification: $error');

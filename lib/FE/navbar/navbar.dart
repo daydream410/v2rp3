@@ -1,5 +1,7 @@
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 import 'package:v2rp3/utils/hex_color.dart';
 import 'package:v2rp3/FE/mainScreen/setting_screen.dart';
 
@@ -40,8 +42,8 @@ class _NavbarState extends State<Navbar> {
   @override
   void initState() {
     super.initState();
-    // Set global reference to this state
     currentNavbarState = this;
+    Get.put(ApprovalNotifController(), permanent: true);
   }
 
   @override
@@ -86,9 +88,15 @@ class _NavbarState extends State<Navbar> {
           setState(() {
             selectedIndex = index;
           });
+          if (index == 1) {
+            Get.find<ApprovalNotifController>().forceRefresh();
+          }
         },
       ),
-      body: screen[selectedIndex],
+      body: IndexedStack(
+        index: selectedIndex,
+        children: screen,
+      ),
     );
   }
 }

@@ -16,6 +16,7 @@ import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/BE/controller.dart';
 import 'package:v2rp3/routes/api_name.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -101,7 +102,7 @@ class _NpApp2State extends State<NpApp2> {
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
     return [
       ApprovalInfoField('Type', (e['tipeName'] ?? '').toString()),
-      ApprovalInfoField('Reffno', (e['reffno'] ?? '').toString()),
+      ApprovalInfoField('Reff No', (e['docno'] ?? '').toString()),
       ApprovalInfoField('Desc', (e['ket'] ?? '').toString()),
       ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(e['amount_forex'])).toString()),
       ApprovalInfoField('Tax Amt', (ApprovalTheme.currencyFmt.format(e['taxAmount'])).toString()),
@@ -297,6 +298,7 @@ class _NpApp2State extends State<NpApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           reffno = response['data']['reffno'];
           message = response['data']['message'];

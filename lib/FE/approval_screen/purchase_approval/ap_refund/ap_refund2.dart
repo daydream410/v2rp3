@@ -18,6 +18,7 @@ import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
 import '../../../../main.dart';
 import 'package:v2rp3/BE/controller.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 class ApRefundApp2 extends StatefulWidget {
   final seckey;
@@ -91,9 +92,22 @@ class _ApRefundApp2State extends State<ApRefundApp2> {
       else if (status == "Send To Draft") { updstatus = "-9"; isVisible = true; }
     });
   }
+  String _tipeName(dynamic tipe) {
+    switch (tipe?.toString()) {
+      case '0':
+        return 'Debit note';
+      case '1':
+        return 'Down Payment';
+      case '2':
+        return 'Other Income/expense';
+      default:
+        return (tipe ?? '').toString();
+    }
+  }
+
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
     return [
-      ApprovalInfoField('Type', (e['tipe'].toString())),
+      ApprovalInfoField('Type', _tipeName(e['tipe'])),
       ApprovalInfoField('Doc No', (e['docno'] ?? '').toString()),
       ApprovalInfoField('Desc', (e['ket'] ?? '').toString()),
       ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(e['amount_forex'])).toString()),
@@ -253,6 +267,7 @@ class _ApRefundApp2State extends State<ApRefundApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

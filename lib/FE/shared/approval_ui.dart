@@ -180,6 +180,38 @@ double approvalSumLineAmount(Iterable<dynamic> items) {
   return total;
 }
 
+double approvalLineTaxAmount(Map<dynamic, dynamic> item) {
+  final tax = item['taxamount'] ?? item['taxAmount'];
+  return approvalToDouble(tax);
+}
+
+/// Sales/PO line net: `(qty × harga) × (100 − lineDisc%) / 100 + tax`.
+double approvalSalesLineNet(Map<dynamic, dynamic> item) {
+  final qty = approvalToDouble(item['qty']);
+  final harga = approvalToDouble(item['harga']);
+  final lineDiscPct = approvalToDouble(item['disc']);
+  final subtotal = qty * harga;
+  final afterLineDisc = subtotal * (100 - lineDiscPct) / 100;
+  return afterLineDisc + approvalLineTaxAmount(item);
+}
+
+/// Sales Order total: sum of line nets, then optional header discount %.
+double approvalSumSalesOrderTotal(
+  Iterable<dynamic> items, {
+  double headerDiscPercent = 0,
+}) {
+  var subtotal = 0.0;
+  for (final item in items) {
+    if (item is Map) {
+      subtotal += approvalSalesLineNet(item);
+    }
+  }
+  if (headerDiscPercent != 0) {
+    subtotal = subtotal * (100 - headerDiscPercent) / 100;
+  }
+  return subtotal;
+}
+
 List<ApprovalInfoField> approvalFieldsFromRecord(
   dynamic record, {
   List<String>? priorityKeys,
@@ -267,13 +299,48 @@ String approvalCashAdvanceTypeLabel(dynamic tipe) {
   return value ?? '-';
 }
 
+/// Project display name from API variants (`projectName`, `projectname`, `projectid`).
+String approvalProjectName(dynamic item) {
+  if (item is! Map) return '-';
+  final direct = item['projectName'] ?? item['projectname'] ?? item['projectid'];
+  if (direct != null && direct.toString().trim().isNotEmpty) {
+    return direct.toString();
+  }
+  final budget = item['budget2'];
+  if (budget is Map) {
+    final fromBudget =
+        budget['cprojectket'] ?? budget['cprojectid'] ?? budget['projectid'];
+    if (fromBudget != null && fromBudget.toString().trim().isNotEmpty) {
+      return fromBudget.toString();
+    }
+  }
+  return '-';
+}
+
+/// Project ID from API variants (`projectid`, `projectId`, nested `budget2`).
+String approvalProjectId(dynamic item) {
+  if (item is! Map) return '-';
+  final direct = item['projectid'] ?? item['projectId'];
+  if (direct != null && direct.toString().trim().isNotEmpty) {
+    return direct.toString();
+  }
+  final budget = item['budget2'];
+  if (budget is Map) {
+    final fromBudget = budget['projectid'] ?? budget['cprojectid'];
+    if (fromBudget != null && fromBudget.toString().trim().isNotEmpty) {
+      return fromBudget.toString();
+    }
+  }
+  return '-';
+}
+
 /// Standard SPPBJ / purchase confirm item fields — matches original DataTable columns.
 List<ApprovalInfoField> approvalSppbjItemFields(dynamic item) {
   return [
     ApprovalInfoField(
         'Request By', item['requestorname']?.toString() ?? ''),
     ApprovalInfoField(
-        'Project Name', item['projectname']?.toString() ?? ''),
+        'Project Name', approvalProjectName(item)),
     ApprovalInfoField(
         'Item Account No', item['itemcoa']?.toString() ?? ''),
     ApprovalInfoField(
@@ -571,7 +638,7 @@ class ApprovalInfoPanel extends StatelessWidget {
     required this.fields,
     this.reason,
     this.extraRecord,
-    this.initiallyExpanded = false,
+    this.initiallyExpanded = true,
   });
 
   List<ApprovalInfoField> get _allFields =>
@@ -968,6 +1035,8 @@ class ApprovalDetailItemsColumn extends StatefulWidget {
   final List<Widget> children;
   final bool scrollable;
   final List<List<ApprovalInfoField>>? tableRows;
+  /// Full field set for row detail popup; defaults to [tableRows] when omitted.
+  final List<List<ApprovalInfoField>>? detailRows;
   final bool selectable;
   final bool Function(int index)? isRowSelected;
   final void Function(int index, bool? selected)? onRowSelectionChanged;
@@ -979,6 +1048,7 @@ class ApprovalDetailItemsColumn extends StatefulWidget {
     this.hint = '',
     this.scrollable = true,
     this.tableRows,
+    this.detailRows,
     this.selectable = false,
     this.isRowSelected,
     this.onRowSelectionChanged,
@@ -1070,6 +1140,7 @@ class _ApprovalDetailItemsColumnState extends State<ApprovalDetailItemsColumn> {
             Expanded(
               child: ApprovalItemsDataTable(
                 rows: widget.tableRows!,
+                detailRows: widget.detailRows,
                 selectable: widget.selectable,
                 isRowSelected: widget.isRowSelected,
                 onRowSelectionChanged: widget.onRowSelectionChanged,
@@ -1127,6 +1198,7 @@ class _ApprovalDetailItemsColumnState extends State<ApprovalDetailItemsColumn> {
 /// Scrollable table for approval item lines (stable layout inside [Expanded]).
 class ApprovalItemsDataTable extends StatelessWidget {
   final List<List<ApprovalInfoField>> rows;
+  final List<List<ApprovalInfoField>>? detailRows;
   final bool selectable;
   final bool Function(int index)? isRowSelected;
   final void Function(int index, bool? selected)? onRowSelectionChanged;
@@ -1135,6 +1207,7 @@ class ApprovalItemsDataTable extends StatelessWidget {
   const ApprovalItemsDataTable({
     super.key,
     required this.rows,
+    this.detailRows,
     this.selectable = false,
     this.isRowSelected,
     this.onRowSelectionChanged,
@@ -1167,7 +1240,9 @@ class ApprovalItemsDataTable extends StatelessWidget {
   }
 
   void _openRowDetail(BuildContext context, int index) {
-    final fields = rows[index];
+    final fields = detailRows != null && index < detailRows!.length
+        ? detailRows![index]
+        : rows[index];
     final header = approvalItemRowHeader(fields);
     showApprovalItemDetail(
       context: context,
@@ -2037,37 +2112,214 @@ class ApprovalSelectableItemTile extends StatelessWidget {
   }
 }
 
-/// Summary totals section (replaces small summary DataTables).
-class ApprovalSummarySection extends StatelessWidget {
+/// Summary totals section — collapsed by default to preserve item list space.
+class ApprovalSummarySection extends StatefulWidget {
   final String title;
   final List<ApprovalInfoField> fields;
+  final bool initiallyExpanded;
+  final String highlightLabel;
 
   const ApprovalSummarySection({
     super.key,
     required this.title,
     required this.fields,
+    this.initiallyExpanded = false,
+    this.highlightLabel = 'Grand Total',
   });
 
   @override
+  State<ApprovalSummarySection> createState() => _ApprovalSummarySectionState();
+}
+
+class _ApprovalSummarySectionState extends State<ApprovalSummarySection> {
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.initiallyExpanded;
+  }
+
+  ApprovalInfoField? get _highlightField {
+    for (final f in widget.fields) {
+      if (f.label == widget.highlightLabel) return f;
+    }
+    return widget.fields.isNotEmpty ? widget.fields.last : null;
+  }
+
+  List<ApprovalInfoField> get _breakdownFields {
+    return widget.fields
+        .where((f) => f.label != widget.highlightLabel)
+        .toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final highlight = _highlightField;
+    final breakdown = _breakdownFields;
+
     return Container(
-      margin: const EdgeInsets.only(top: 12, bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(top: 6),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title,
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.receipt_long_outlined,
+                      size: 16, color: ApprovalTheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+                  if (!_expanded && highlight != null)
+                    Text(
+                      highlight.value,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: ApprovalTheme.primaryDark,
+                      ),
+                    ),
+                  Icon(
+                    _expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.chevron_right_rounded,
+                    size: 20,
+                    color: Colors.grey.shade500,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded) ...[
+            Divider(height: 1, color: Colors.grey.shade200),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+              child: Column(
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final twoCol = constraints.maxWidth >= 320;
+                      if (!twoCol) {
+                        return Column(
+                          children: [
+                            for (final f in breakdown)
+                              _CompactSummaryRow(label: f.label, value: f.value),
+                          ],
+                        );
+                      }
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 2,
+                        children: [
+                          for (final f in breakdown)
+                            SizedBox(
+                              width: (constraints.maxWidth - 8) / 2,
+                              child: _CompactSummaryRow(
+                                label: f.label,
+                                value: f.value,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  if (highlight != null) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: ApprovalTheme.primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              highlight.label,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.grey.shade800,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            highlight.value,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: ApprovalTheme.primaryDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactSummaryRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _CompactSummaryRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 5,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Expanded(
+            flex: 6,
+            child: Text(
+              value.isNotEmpty ? value : '-',
+              textAlign: TextAlign.end,
               style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade800)),
-          const SizedBox(height: 10),
-          for (final f in fields) ApprovalInfoRow(label: f.label, value: f.value),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade800,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );

@@ -16,6 +16,7 @@ import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/BE/controller.dart';
 import 'package:v2rp3/routes/api_name.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -74,7 +75,8 @@ class _CaSetApproval2State extends State<CaSetApproval2> {
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
     return [
       ApprovalInfoField('CA No', (e['nokasbon'] ?? '').toString()),
-      ApprovalInfoField('Project Name', (e['projectname'] ?? '').toString()),
+      ApprovalInfoField('Project Name', approvalProjectName(e)),
+      ApprovalInfoField('Project ID', approvalProjectId(e)),
       ApprovalInfoField('Req By', (e['requestorname'] ?? '').toString()),
       ApprovalInfoField('Type', approvalCashAdvanceTypeLabel(e['tipe'])),
       ApprovalInfoField('Acc Name', approvalAccountName(e)),
@@ -267,6 +269,7 @@ class _CaSetApproval2State extends State<CaSetApproval2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           message = response['data']['message'];
         });

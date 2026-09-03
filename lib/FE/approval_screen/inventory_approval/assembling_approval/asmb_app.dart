@@ -50,25 +50,18 @@ class _AssemblingAppState extends State<AssemblingApp> {
 
   void _openDetail(dynamic item) {
     Get.to(() => AssemblingApp2(
-                                              seckey: item
-                                                  ['seckey'],
-                                              reffno: item
-                                                  ['header']['reffno'],
-                                              ket: item['header']
-                                                  ['ket'],
-                                              tanggal: item
-                                                  ['header']['tanggal'],
-                                              requestor: item
-                                                  ['header']['requestor'],
-                                              supplier: item
-                                                  ['header']['supplierid'],
-                                              location: item
-                                                  ['header']['locationid'],
-                                              item: item['header']
-                                                  ['stockcode'],
-                                              estdate: item
-                                                  ['header']['duedate'],
-                                            ));
+          seckey: item['seckey'],
+          reffno: item['header']['reffno'],
+          ket: item['header']['ket'],
+          tanggal: item['header']['tanggal'],
+          requestor: item['header']['requestor'],
+          supplier: item['header']['supplierid'],
+          location: item['header']['locationid'],
+          item: item['header']['stockcode'],
+          estdate: item['header']['duedate'],
+          qty: item['header']['qty'],
+          estAmount: item['header']['amount'],
+        ));
   }
 
   Widget _buildList() {

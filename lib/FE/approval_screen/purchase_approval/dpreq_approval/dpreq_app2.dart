@@ -15,6 +15,7 @@ import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/BE/controller.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -97,9 +98,20 @@ class _DpReqApp2State extends State<DpReqApp2> {
       else if (status == "Send To Draft") { updstatus = "-9"; isVisible = true; }
     });
   }
+  String _tipeName(dynamic tipe) {
+    switch (tipe?.toString()) {
+      case '0':
+        return 'Purchase Order';
+      case '1':
+        return 'Other Expense';
+      default:
+        return (tipe ?? '').toString();
+    }
+  }
+
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
     return [
-      ApprovalInfoField('Type', (e['tipe'].toString())),
+      ApprovalInfoField('Type', _tipeName(e['tipe'])),
       ApprovalInfoField('Reffno', (e['reffno'] ?? '').toString()),
       ApprovalInfoField('Desc', (e['ket'] ?? '').toString()),
       ApprovalInfoField('CCY', (e['ccy'] ?? '').toString()),
@@ -265,6 +277,7 @@ class _DpReqApp2State extends State<DpReqApp2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           reffno = response['data']['reffno'];
           message = response['data']['message'];

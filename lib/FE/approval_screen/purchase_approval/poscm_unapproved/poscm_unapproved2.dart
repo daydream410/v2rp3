@@ -15,6 +15,7 @@ import 'package:v2rp3/FE/approval_screen/purchase_approval/poscm_unapproved/posc
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -389,6 +390,7 @@ class _PoUnapproved2State extends State<PoUnapproved2> {
         });
       }
       if (status == true) {
+        approvalRefreshMenuCounts();
         // setState(() {
         //   message = response['data']['message'];
         // });

@@ -15,6 +15,7 @@ import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:v2rp3/BE/controller.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
 import '../../../../BE/resD.dart';
@@ -108,8 +109,9 @@ class _SalesOrderApproval2State extends State<SalesOrderApproval2> {
       ApprovalInfoField('Unit', (e['unit'] ?? '').toString()),
       ApprovalInfoField('QTY', (e['qty'].toString())),
       ApprovalInfoField('Price/ Unit', (ApprovalTheme.currencyFmt.format(e['harga'])).toString()),
-      ApprovalInfoField('Disc', (ApprovalTheme.currencyFmt.format(e['disc'])).toString()),
-      ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(e['amount'])).toString()),
+      ApprovalInfoField('Disc', ('${e['disc']}%').toString()),
+      ApprovalInfoField('Tax Amt', (ApprovalTheme.currencyFmt.format(approvalLineTaxAmount(e))).toString()),
+      ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(approvalSalesLineNet(e))).toString()),
       ApprovalInfoField('Amt in IDR', (ApprovalTheme.currencyFmt.format(e['amtidr'])).toString()),
     ];
   }
@@ -200,21 +202,35 @@ class _SalesOrderApproval2State extends State<SalesOrderApproval2> {
         },
       );
       final caConfirmData = json.decode(getData.body);
-      final _data = caConfirmData['data'];
-      if (_data is Map && _data['header'] is Map) {
-      }
-      // setState(() {
-      dataaa = caConfirmData['data']['detail'];
+      final data = caConfirmData['data'];
+      dataaa = data['detail'];
 
-      //hitung total
-      totalPrice = 0.0;
-      for (var item in dataaa) {
-        totalPrice += approvalToDouble(item["amount"]);
+      final header = data['header'];
+      final grossTotal = approvalSumLineAmount(dataaa);
+
+      // Prefer header total from API (same source as web); avoid guessing discounts.
+      double? headerTotal;
+      if (header is Map) {
+        for (final key in ['amount', 'amtidr', 'total', 'grandtotal', 'netamount']) {
+          final value = approvalToDouble(header[key]);
+          if (value > 0) {
+            headerTotal = value;
+            break;
+          }
+        }
       }
 
-      // });
-      print("totalllll  " + totalPrice.toString());
-      print("dataaa " + dataaa.toString());
+      if (headerTotal != null) {
+        totalPrice = headerTotal;
+      } else {
+        totalPrice = grossTotal;
+      }
+
+      print('SO header: $header');
+      print('SO grossTotal: $grossTotal');
+      print('SO headerTotal: $headerTotal');
+      print('SO totalPrice: $totalPrice');
+      print('SO detail: $dataaa');
       if (mounted) setState(() {});
       return dataaa;
     } catch (e) {
@@ -269,6 +285,7 @@ class _SalesOrderApproval2State extends State<SalesOrderApproval2> {
         messageError = response['message'];
       });
       if (status == true) {
+        approvalRefreshMenuCounts();
         setState(() {
           reffno = response['data']['reffno'];
           message = response['data']['message'];
