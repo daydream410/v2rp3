@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 import 'package:v2rp3/FE/shared/approval_menu_ui.dart';
 
 enum AuthStep { login, otp, company }
@@ -1754,6 +1755,8 @@ class AuthRoleCard extends StatelessWidget {
   final VoidCallback? onTap;
   final bool isLoading;
   final bool heroStyle;
+  final ApprovalPendingSummary pending;
+  final bool isLoadingBadge;
 
   const AuthRoleCard({
     super.key,
@@ -1761,6 +1764,8 @@ class AuthRoleCard extends StatelessWidget {
     this.onTap,
     this.isLoading = false,
     this.heroStyle = false,
+    this.pending = ApprovalPendingSummary.empty,
+    this.isLoadingBadge = false,
   });
 
   @override
@@ -1842,9 +1847,10 @@ class AuthRoleCard extends StatelessWidget {
                   child: Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: layout.isTablet ? 16 : 12,
-                      vertical: layout.isTablet ? 16 : 12,
+                      vertical: layout.isTablet ? 14 : 12,
                     ),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
                           width: layout.isTablet ? 52 : 44,
@@ -1904,13 +1910,34 @@ class AuthRoleCard extends StatelessWidget {
                                   ),
                                 ],
                               ),
+                              if (isLoadingBadge) ...[
+                                const SizedBox(height: 8),
+                                AuthRolePendingLoading(heroStyle: heroStyle),
+                              ] else if (pending.hasPending) ...[
+                                const SizedBox(height: 8),
+                                AuthRolePendingMenus(
+                                  summary: pending,
+                                  heroStyle: heroStyle,
+                                ),
+                              ],
                             ],
                           ),
                         ),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: layout.isTablet ? 26 : 22,
-                          color: chevronColor,
+                        const SizedBox(width: 8),
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (!isLoadingBadge && pending.hasPending)
+                              AuthRolePendingTotal(
+                                total: pending.total,
+                                heroStyle: heroStyle,
+                              ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              size: layout.isTablet ? 26 : 22,
+                              color: chevronColor,
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1921,6 +1948,185 @@ class AuthRoleCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Compact total pill for role cards (avoids oversized red badge).
+class AuthRolePendingTotal extends StatelessWidget {
+  final int total;
+  final bool heroStyle;
+
+  const AuthRolePendingTotal({
+    super.key,
+    required this.total,
+    this.heroStyle = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = total > 99 ? '99+' : '$total';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: heroStyle
+            ? ApprovalMenuTheme.primary.withOpacity(0.92)
+            : const Color(0xFFFFF1E0),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: heroStyle
+              ? Colors.white.withOpacity(0.35)
+              : ApprovalMenuTheme.primary.withOpacity(0.45),
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: heroStyle ? Colors.white : ApprovalMenuTheme.primaryDark,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          height: 1.1,
+        ),
+      ),
+    );
+  }
+}
+
+/// Shows which approval menus still need action under a company card.
+class AuthRolePendingMenus extends StatelessWidget {
+  final ApprovalPendingSummary summary;
+  final bool heroStyle;
+  final int maxVisible;
+
+  const AuthRolePendingMenus({
+    super.key,
+    required this.summary,
+    this.heroStyle = false,
+    this.maxVisible = 3,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!summary.hasPending) return const SizedBox.shrink();
+
+    final visible = summary.menus.take(maxVisible).toList(growable: false);
+    final remaining = summary.menus.length - visible.length;
+    final chipBg = heroStyle
+        ? Colors.white.withOpacity(0.12)
+        : const Color(0xFFFFF6EC);
+    final chipBorder = heroStyle
+        ? Colors.white.withOpacity(0.22)
+        : ApprovalMenuTheme.primary.withOpacity(0.28);
+    final labelColor =
+        heroStyle ? Colors.white.withOpacity(0.92) : Colors.grey.shade800;
+    final countColor =
+        heroStyle ? ApprovalMenuTheme.primary : ApprovalMenuTheme.primaryDark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Needs action',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+            color: heroStyle
+                ? Colors.white.withOpacity(0.55)
+                : Colors.grey.shade500,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final menu in visible)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: chipBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: chipBorder),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      menu.label,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: labelColor,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      menu.count > 99 ? '99+' : '${menu.count}',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: countColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (remaining > 0)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: chipBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: chipBorder),
+                ),
+                child: Text(
+                  '+$remaining more',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: labelColor,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class AuthRolePendingLoading extends StatelessWidget {
+  final bool heroStyle;
+
+  const AuthRolePendingLoading({super.key, this.heroStyle = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.6,
+            color: heroStyle ? Colors.white70 : ApprovalMenuTheme.primary,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Checking pending…',
+          style: TextStyle(
+            fontSize: 11,
+            color: heroStyle
+                ? Colors.white.withOpacity(0.65)
+                : Colors.grey.shade500,
+          ),
+        ),
+      ],
     );
   }
 }

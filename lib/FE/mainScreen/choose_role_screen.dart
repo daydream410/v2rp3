@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:v2rp3/utils/hex_color.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 import 'package:v2rp3/BE/reqip.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/mainScreen/otp_verification_screen.dart';
@@ -24,7 +25,9 @@ class ChooseRoleScreen extends StatefulWidget {
 class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
   bool _isLoading = false;
   bool _isLoadingRoles = true;
+  bool _isLoadingBadges = false;
   List<Map<String, dynamic>> _roles = [];
+  final Map<String, ApprovalPendingSummary> _pendingBySeckey = {};
 
   @override
   void initState() {
@@ -36,6 +39,7 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
     setState(() {
       _isLoadingRoles = true;
       _roles = [];
+      _pendingBySeckey.clear();
     });
 
     final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -78,6 +82,38 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
     if (mounted) {
       setState(() => _isLoadingRoles = false);
     }
+
+    if (_roles.isNotEmpty) {
+      unawaited(_loadPendingBadges());
+    }
+  }
+
+  Future<void> _loadPendingBadges() async {
+    if (!mounted || _roles.isEmpty) return;
+    setState(() => _isLoadingBadges = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? fcmToken = prefs.getString('fcm_token');
+      if (fcmToken == null || fcmToken.isEmpty) {
+        fcmToken = await getAndSaveFcmToken();
+      }
+
+      await approvalProbePendingCountsForRoles(
+        _roles,
+        fcmToken: fcmToken ?? '',
+        onSummary: (seckey, summary) {
+          if (!mounted) return;
+          setState(() => _pendingBySeckey[seckey] = summary);
+        },
+      );
+    } catch (e) {
+      print('Error loading company pending badges: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingBadges = false);
+      }
+    }
   }
 
   Future<void> _chooseRole(Map<String, dynamic> role) async {
@@ -105,6 +141,9 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
       if (MsgHeader.roleSuccess == true) {
         await prefs.setString('kulonuwun', MsgHeader.kulonuwun ?? '');
         await prefs.setString('monggo', MsgHeader.monggo ?? '');
+
+        // Prefetch pending approvals for the newly selected company.
+        await approvalReloadAfterCompanyChange();
 
         if (mounted) {
           Get.snackbar(
@@ -188,6 +227,10 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
                 role: role,
                 isLoading: _isLoading,
                 heroStyle: true,
+                pending: _pendingBySeckey[role['seckey']?.toString()] ??
+                    ApprovalPendingSummary.empty,
+                isLoadingBadge: _isLoadingBadges &&
+                    !_pendingBySeckey.containsKey(role['seckey']?.toString()),
                 onTap: () => _chooseRole(role),
               ),
           ],

@@ -77,6 +77,7 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
     });
   }
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
+    if (e is! Map) return const [];
     return [
       ApprovalInfoField('CA No', (e['nokasbon'] ?? '').toString()),
       ApprovalInfoField('Project Name', approvalProjectName(e)),
@@ -85,11 +86,20 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
       ApprovalInfoField('Type', approvalCashAdvanceTypeLabel(e['tipe'])),
       ApprovalInfoField('Acc Name', approvalAccountName(e)),
       ApprovalInfoField('Desc', e['ket']?.toString() ?? '-'),
-      ApprovalInfoField('Unit', (e['unit'].toString())),
-      ApprovalInfoField('QTY', (e['qty'].toString())),
-      ApprovalInfoField('Price', (ApprovalTheme.currencyFmt.format(e['harga'])).toString()),
-      ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(e['amount'])).toString()),
-      ApprovalInfoField('Buget Avail', (ApprovalTheme.currencyFmt.format(approvalBudgetAvailable(e))).toString()),
+      ApprovalInfoField('Unit', e['unit']?.toString() ?? '-'),
+      ApprovalInfoField('QTY', e['qty']?.toString() ?? '-'),
+      ApprovalInfoField(
+        'Price',
+        ApprovalTheme.currencyFmt.format(approvalToDouble(e['harga'])),
+      ),
+      ApprovalInfoField(
+        'Amount',
+        ApprovalTheme.currencyFmt.format(approvalToDouble(e['amount'])),
+      ),
+      ApprovalInfoField(
+        'Buget Avail',
+        ApprovalTheme.currencyFmt.format(approvalBudgetAvailable(e)),
+      ),
     ];
   }
   Widget _buildBody() {
@@ -207,21 +217,35 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
         },
       );
       final caConfirmData = json.decode(getData.body);
-      final _data = caConfirmData['data'];
-      if (_data is Map && _data['header'] is Map) {
-      }
-      setState(() {
-        dataaa = caConfirmData['data']['detail'] ?? [];
-
-        //hitung total
-        totalPrice = 0;
-        for (var item in dataaa) {
-          totalPrice += approvalToDouble(item["amount"]);
+      final raw = caConfirmData['data'];
+      List details = [];
+      if (raw is Map) {
+        final detail = raw['detail'];
+        if (detail is List) {
+          details = detail;
         }
-      });
+      } else if (raw is List) {
+        details = raw;
+      }
+
+      var total = 0.0;
+      for (final item in details) {
+        if (item is Map) {
+          total += approvalToDouble(item['amount']);
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          dataaa = details;
+          totalPrice = total;
+        });
+      } else {
+        dataaa = details;
+        totalPrice = total;
+      }
       print("totalllll  " + totalPrice.toString());
       print("dataaa " + dataaa.toString());
-      if (mounted) setState(() {});
       return dataaa;
     } on TimeoutException catch (e) {
       print('Timeout error: $e');
@@ -304,7 +328,10 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
       if (status == true) {
         approvalRefreshMenuCounts();
         setState(() {
-          message = response['data']['message'];
+          final data = response['data'];
+          message = data is Map
+              ? (data['message']?.toString() ?? '')
+              : (data?.toString() ?? '');
         });
         QuickAlert.show(
             context: context,
@@ -323,7 +350,10 @@ class _CashAdvanceApproval2State extends State<CashAdvanceApproval2> {
             });
       } else {
         setState(() {
-          message = response['data']['message'];
+          final data = response['data'];
+          message = data is Map
+              ? (data['message']?.toString() ?? messageError?.toString() ?? '')
+              : (data?.toString() ?? messageError?.toString() ?? '');
         });
         await Future.delayed(const Duration(milliseconds: 1000));
         await QuickAlert.show(

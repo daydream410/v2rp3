@@ -340,7 +340,8 @@ class MsgHeader {
   }
 
   static Future<void> chooseRole(
-      String seckey, String fcmToken, String platform) async {
+      String seckey, String fcmToken, String platform,
+      {bool persist = true}) async {
     roleSuccess = false;
     roleMessage = '';
     kulonuwun = '';
@@ -373,9 +374,12 @@ class MsgHeader {
           kulonuwun = data['kulonuwun'] ?? '';
           monggo = data['monggo'] ?? '';
 
-          final SharedPreferences prefs = await SharedPreferences.getInstance();
-          await prefs.setString('kulonuwun', kulonuwun);
-          await prefs.setString('monggo', monggo);
+          if (persist) {
+            final SharedPreferences prefs =
+                await SharedPreferences.getInstance();
+            await prefs.setString('kulonuwun', kulonuwun);
+            await prefs.setString('monggo', monggo);
+          }
         } else {
           roleSuccess = false;
         }

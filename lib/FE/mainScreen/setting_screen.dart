@@ -10,7 +10,10 @@ import 'package:http/http.dart' as http;
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
+import 'package:v2rp3/BE/reqip.dart';
 import 'package:v2rp3/FE/shared/approval_menu_ui.dart';
+import 'package:v2rp3/FE/shared/auth_ui.dart';
 import 'package:v2rp3/FE/mainScreen/login_screen4.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/main.dart' show getAndSaveFcmToken;
@@ -31,6 +34,9 @@ class _SettingScreenState extends State<SettingScreen> {
   String? _errorMessage;
   bool _isLoadingRoles = false;
   List<Map<String, dynamic>> _roles = [];
+  final Map<String, ApprovalPendingSummary> _pendingBySeckey = {};
+  bool _isLoadingRoleBadges = false;
+  bool _roleBadgeProbeStarted = false;
 
   @override
   void initState() {
@@ -722,6 +728,7 @@ class _SettingScreenState extends State<SettingScreen> {
     setState(() {
       _isLoadingRoles = true;
       _roles = [];
+      _pendingBySeckey.clear();
     });
 
     try {
@@ -840,7 +847,60 @@ class _SettingScreenState extends State<SettingScreen> {
     }
   }
 
+  Future<void> _loadRolePendingBadges({
+    void Function(void Function())? setModalState,
+  }) async {
+    if (_roles.isEmpty) return;
+    _isLoadingRoleBadges = true;
+    setModalState?.call(() {});
+    if (mounted) setState(() {});
+
+    try {
+      // Prefer already-loaded summary for the active company session.
+      if (Get.isRegistered<ApprovalNotifController>()) {
+        final totals = Get.find<ApprovalNotifController>().totals.value;
+        final current = ApprovalPendingSummary.fromTotals(totals);
+        final currentRole = _profileData?['role']?.toString();
+        final currentCompany = _profileData?['company']?.toString();
+        for (final role in _roles) {
+          if (role['role']?.toString() == currentRole &&
+              role['company']?.toString() == currentCompany) {
+            final seckey = role['seckey']?.toString() ?? '';
+            if (seckey.isNotEmpty) {
+              _pendingBySeckey[seckey] = current;
+              setModalState?.call(() {});
+            }
+            break;
+          }
+        }
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      String? fcmToken = prefs.getString('fcm_token');
+      if (fcmToken == null || fcmToken.isEmpty) {
+        fcmToken = await getAndSaveFcmToken();
+      }
+
+      await approvalProbePendingCountsForRoles(
+        _roles,
+        fcmToken: fcmToken ?? '',
+        onSummary: (seckey, summary) {
+          _pendingBySeckey[seckey] = summary;
+          setModalState?.call(() {});
+          if (mounted) setState(() {});
+        },
+      );
+    } catch (e) {
+      print('Error loading role pending badges: $e');
+    } finally {
+      _isLoadingRoleBadges = false;
+      setModalState?.call(() {});
+      if (mounted) setState(() {});
+    }
+  }
+
   void _showChangeCompanyDialog() {
+    _roleBadgeProbeStarted = false;
     _fetchRoles().then((_) {
       if (!mounted || _roles.isEmpty) return;
 
@@ -849,248 +909,291 @@ class _SettingScreenState extends State<SettingScreen> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (context) {
-          Size dialogSize = MediaQuery.of(context).size;
-          bool isTabletDialog = dialogSize.width > 600;
-          double dialogPadding = isTabletDialog ? 24.0 : 20.0;
-          double dialogTitleFontSize = isTabletDialog ? 24.0 : 22.0;
-          double dialogIconSize = isTabletDialog ? 32.0 : 28.0;
-          double roleCardPadding = isTabletDialog ? 20.0 : 16.0;
-          double roleIconSize = isTabletDialog ? 60.0 : 50.0;
-          double roleIconInnerSize = isTabletDialog ? 32.0 : 28.0;
-          double roleTitleFontSize = isTabletDialog ? 18.0 : 16.0;
-          double roleSubtitleFontSize = isTabletDialog ? 15.0 : 14.0;
-          double roleCompanyFontSize = isTabletDialog ? 13.0 : 12.0;
-          double roleBadgeFontSize = isTabletDialog ? 11.0 : 10.0;
-          double listPadding = isTabletDialog ? 20.0 : 16.0;
-          double maxDialogWidth = isTabletDialog ? 600.0 : double.infinity;
+          return StatefulBuilder(
+            builder: (context, setModalState) {
+              if (!_roleBadgeProbeStarted && _roles.isNotEmpty) {
+                _roleBadgeProbeStarted = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _loadRolePendingBadges(setModalState: setModalState);
+                });
+              }
 
-          return Container(
-            height: dialogSize.height * 0.75,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(30),
-                topRight: Radius.circular(30),
-              ),
-            ),
-            child: Column(
-              children: [
-                // Header
-                Container(
-                  padding: EdgeInsets.all(dialogPadding),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        HexColor("#F4A62A"),
-                        HexColor("#F4A62A").withOpacity(0.8),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(30),
-                      topRight: Radius.circular(30),
-                    ),
+              Size dialogSize = MediaQuery.of(context).size;
+              bool isTabletDialog = dialogSize.width > 600;
+              double dialogPadding = isTabletDialog ? 24.0 : 20.0;
+              double dialogTitleFontSize = isTabletDialog ? 24.0 : 22.0;
+              double dialogIconSize = isTabletDialog ? 32.0 : 28.0;
+              double roleCardPadding = isTabletDialog ? 20.0 : 16.0;
+              double roleIconSize = isTabletDialog ? 56.0 : 48.0;
+              double roleIconInnerSize = isTabletDialog ? 28.0 : 24.0;
+              double roleTitleFontSize = isTabletDialog ? 18.0 : 16.0;
+              double roleSubtitleFontSize = isTabletDialog ? 15.0 : 14.0;
+              double roleCompanyFontSize = isTabletDialog ? 13.0 : 12.0;
+              double roleBadgeFontSize = isTabletDialog ? 12.0 : 11.0;
+              double listPadding = isTabletDialog ? 24.0 : 16.0;
+              double maxDialogWidth = isTabletDialog ? 600.0 : double.infinity;
+              double sheetHeight = dialogSize.height * 0.75;
+
+              return Container(
+                height: sheetHeight,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(isTabletDialog ? 28.0 : 24.0),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.business_center,
-                        color: Colors.white,
-                        size: dialogIconSize,
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(dialogPadding),
+                      decoration: BoxDecoration(
+                        color: HexColor("#F4A62A"),
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(isTabletDialog ? 28.0 : 24.0),
+                        ),
                       ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Change Company',
-                          style: TextStyle(
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.business_center,
                             color: Colors.white,
-                            fontSize: dialogTitleFontSize,
-                            fontWeight: FontWeight.bold,
+                            size: dialogIconSize,
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Change Company',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: dialogTitleFontSize,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: isTabletDialog ? 28.0 : 24.0,
+                            ),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: maxDialogWidth),
+                          child: ListView.builder(
+                            padding: EdgeInsets.all(listPadding),
+                            itemCount: _roles.length,
+                            itemBuilder: (context, index) {
+                              final role = _roles[index];
+                              final seckey = role['seckey']?.toString() ?? '';
+                              final pending = _pendingBySeckey[seckey] ??
+                                  ApprovalPendingSummary.empty;
+                              final showBadgeLoader = _isLoadingRoleBadges &&
+                                  !_pendingBySeckey.containsKey(seckey);
+                              final currentRole =
+                                  _profileData?['role'] ?? '';
+                              final currentCompany =
+                                  _profileData?['company'] ?? '';
+                              final isCurrentRole =
+                                  role['role'] == currentRole &&
+                                      role['company'] == currentCompany;
+
+                              return Container(
+                                margin: EdgeInsets.only(
+                                  bottom: isTabletDialog ? 16.0 : 12.0,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isCurrentRole
+                                      ? HexColor("#F4A62A").withOpacity(0.1)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isCurrentRole
+                                        ? HexColor("#F4A62A")
+                                        : Colors.grey[300]!,
+                                    width: isCurrentRole ? 2 : 1,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      blurRadius: 5,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: isCurrentRole
+                                        ? null
+                                        : () => _chooseRole(role),
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Padding(
+                                      padding: EdgeInsets.all(roleCardPadding),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            width: roleIconSize,
+                                            height: roleIconSize,
+                                            decoration: BoxDecoration(
+                                              color: HexColor("#F4A62A")
+                                                  .withOpacity(0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Icon(
+                                              Icons.business,
+                                              color: HexColor("#F4A62A"),
+                                              size: roleIconInnerSize,
+                                            ),
+                                          ),
+                                          SizedBox(
+                                              width:
+                                                  isTabletDialog ? 20.0 : 16.0),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        role['role'] ?? 'N/A',
+                                                        style: TextStyle(
+                                                          fontSize:
+                                                              roleTitleFontSize,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color:
+                                                              Colors.grey[900],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    if (isCurrentRole)
+                                                      Container(
+                                                        padding: EdgeInsets
+                                                            .symmetric(
+                                                          horizontal:
+                                                              isTabletDialog
+                                                                  ? 10.0
+                                                                  : 8.0,
+                                                          vertical:
+                                                              isTabletDialog
+                                                                  ? 6.0
+                                                                  : 4.0,
+                                                        ),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: HexColor(
+                                                              "#F4A62A"),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(12),
+                                                        ),
+                                                        child: Text(
+                                                          'Current',
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize:
+                                                                roleBadgeFontSize,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                                SizedBox(height: 4),
+                                                Text(
+                                                  role['companyname'] ?? 'N/A',
+                                                  style: TextStyle(
+                                                    fontSize:
+                                                        roleSubtitleFontSize,
+                                                    color: Colors.grey[700],
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                SizedBox(height: 4),
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.domain,
+                                                      size: isTabletDialog
+                                                          ? 14.0
+                                                          : 12.0,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                    SizedBox(width: 4),
+                                                    Text(
+                                                      role['company'] ?? 'N/A',
+                                                      style: TextStyle(
+                                                        fontSize:
+                                                            roleCompanyFontSize,
+                                                        color:
+                                                            Colors.grey[600],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                if (showBadgeLoader) ...[
+                                                  const SizedBox(height: 8),
+                                                  const AuthRolePendingLoading(),
+                                                ] else if (pending
+                                                    .hasPending) ...[
+                                                  const SizedBox(height: 8),
+                                                  AuthRolePendingMenus(
+                                                    summary: pending,
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              if (!showBadgeLoader &&
+                                                  pending.hasPending)
+                                                AuthRolePendingTotal(
+                                                  total: pending.total,
+                                                ),
+                                              if (!isCurrentRole)
+                                                Icon(
+                                                  Icons.arrow_forward_ios,
+                                                  size: isTabletDialog
+                                                      ? 18.0
+                                                      : 16.0,
+                                                  color: Colors.grey[400],
+                                                ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: isTabletDialog ? 28.0 : 24.0,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                ),
-                // Roles List
-                Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: maxDialogWidth),
-                      child: ListView.builder(
-                        padding: EdgeInsets.all(listPadding),
-                        itemCount: _roles.length,
-                        itemBuilder: (context, index) {
-                          final role = _roles[index];
-                          final currentRole = _profileData?['role'] ?? '';
-                          final currentCompany = _profileData?['company'] ?? '';
-                          final isCurrentRole = role['role'] == currentRole &&
-                              role['company'] == currentCompany;
-
-                          return Container(
-                            margin: EdgeInsets.only(
-                              bottom: isTabletDialog ? 16.0 : 12.0,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isCurrentRole
-                                  ? HexColor("#F4A62A").withOpacity(0.1)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isCurrentRole
-                                    ? HexColor("#F4A62A")
-                                    : Colors.grey[300]!,
-                                width: isCurrentRole ? 2 : 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 5,
-                                  offset: Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: isCurrentRole
-                                    ? null
-                                    : () => _chooseRole(role),
-                                borderRadius: BorderRadius.circular(16),
-                                child: Padding(
-                                  padding: EdgeInsets.all(roleCardPadding),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: roleIconSize,
-                                        height: roleIconSize,
-                                        decoration: BoxDecoration(
-                                          color: HexColor("#F4A62A")
-                                              .withOpacity(0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Icon(
-                                          Icons.business,
-                                          color: HexColor("#F4A62A"),
-                                          size: roleIconInnerSize,
-                                        ),
-                                      ),
-                                      SizedBox(
-                                          width: isTabletDialog ? 20.0 : 16.0),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    role['role'] ?? 'N/A',
-                                                    style: TextStyle(
-                                                      fontSize:
-                                                          roleTitleFontSize,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: Colors.grey[900],
-                                                    ),
-                                                  ),
-                                                ),
-                                                if (isCurrentRole)
-                                                  Container(
-                                                    padding:
-                                                        EdgeInsets.symmetric(
-                                                      horizontal: isTabletDialog
-                                                          ? 10.0
-                                                          : 8.0,
-                                                      vertical: isTabletDialog
-                                                          ? 6.0
-                                                          : 4.0,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color:
-                                                          HexColor("#F4A62A"),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              12),
-                                                    ),
-                                                    child: Text(
-                                                      'Current',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize:
-                                                            roleBadgeFontSize,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                            SizedBox(height: 4),
-                                            Text(
-                                              role['companyname'] ?? 'N/A',
-                                              style: TextStyle(
-                                                fontSize: roleSubtitleFontSize,
-                                                color: Colors.grey[700],
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            SizedBox(height: 4),
-                                            Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.domain,
-                                                  size: isTabletDialog
-                                                      ? 14.0
-                                                      : 12.0,
-                                                  color: Colors.grey[600],
-                                                ),
-                                                SizedBox(width: 4),
-                                                Text(
-                                                  role['company'] ?? 'N/A',
-                                                  style: TextStyle(
-                                                    fontSize:
-                                                        roleCompanyFontSize,
-                                                    color: Colors.grey[600],
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      if (!isCurrentRole)
-                                        Icon(
-                                          Icons.arrow_forward_ios,
-                                          color: HexColor("#F4A62A"),
-                                          size: isTabletDialog ? 22.0 : 20.0,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           );
         },
       );
@@ -1162,9 +1265,12 @@ class _SettingScreenState extends State<SettingScreen> {
                 await SharedPreferences.getInstance();
             await prefs.setString('kulonuwun', newKulonuwun);
             await prefs.setString('monggo', newMonggo);
+            MsgHeader.kulonuwun = newKulonuwun;
+            MsgHeader.monggo = newMonggo;
 
-            // Refresh profile data
+            // Refresh profile + pending approvals for the new company session.
             await fetchProfile();
+            await approvalReloadAfterCompanyChange();
 
             if (mounted) {
               QuickAlert.show(

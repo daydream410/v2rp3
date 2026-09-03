@@ -43,7 +43,9 @@ class _NavbarState extends State<Navbar> {
   void initState() {
     super.initState();
     currentNavbarState = this;
-    Get.put(ApprovalNotifController(), permanent: true);
+    if (!Get.isRegistered<ApprovalNotifController>()) {
+      Get.put(ApprovalNotifController(), permanent: true);
+    }
   }
 
   @override
