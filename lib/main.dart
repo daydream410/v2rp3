@@ -9,6 +9,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:v2rp3/BE/reqip.dart';
 import 'package:v2rp3/FE/mainScreen/login_screen4.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart' as navbar_module;
@@ -54,9 +55,11 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print(
       '🔔 [FCM:BACKGROUND] Notification: ${message.notification?.title} | ${message.notification?.body}');
 
-  // iOS does not auto-display data-only messages in background; show locally.
+  // iOS already displays `notification` payloads via APNs. Only synthesize a
+  // local notification for data-only messages, which APNs will not banner.
   if (Platform.isIOS &&
-      (message.notification != null || message.data.isNotEmpty)) {
+      message.notification == null &&
+      message.data.isNotEmpty) {
     await initializeNotifications();
     await _showFcmLocalNotification(message);
   }
@@ -408,7 +411,7 @@ Future<void> saveFcmTokenToLocal(String? token) async {
 }
 
 // Function to get and save FCM token
-Future<String?> getAndSaveFcmToken() async {
+Future<String?> getAndSaveFcmToken({bool forceRefresh = false}) async {
   try {
     print('🔑 [FCM:TOKEN] Requesting FCM token...');
     final FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -422,7 +425,7 @@ Future<String?> getAndSaveFcmToken() async {
       if (apnsToken == null) {
         print('⏳ [FCM:TOKEN] APNS token not available yet, waiting...');
         int retryCount = 0;
-        const maxRetries = 10;
+        const maxRetries = 15;
 
         while (apnsToken == null && retryCount < maxRetries) {
           await Future.delayed(const Duration(seconds: 2));
@@ -443,6 +446,20 @@ Future<String?> getAndSaveFcmToken() async {
 
       print(
           '✅ [FCM:TOKEN] APNS token is available: ${apnsToken.substring(0, 20)}...');
+
+      // Old tokens were minted while FCM thought this was production APNs.
+      // Firebase Console tests to those tokens never arrive. Rebind once.
+      final prefs = await SharedPreferences.getInstance();
+      const rebindKey = 'fcm_ios_apns_rebind_v2';
+      if (forceRefresh || prefs.getBool(rebindKey) != true) {
+        print('🔄 [FCM:TOKEN] Deleting stale iOS FCM token to rebind APNs');
+        try {
+          await messaging.deleteToken();
+        } catch (e) {
+          print('⚠️ [FCM:TOKEN] deleteToken failed: $e');
+        }
+        await prefs.setBool(rebindKey, true);
+      }
     }
 
     String? token = await messaging.getToken();
@@ -455,6 +472,7 @@ Future<String?> getAndSaveFcmToken() async {
       print(
           '✅ [FCM:TOKEN] Token (first 50 chars): ${token.substring(0, token.length > 50 ? 50 : token.length)}...');
       print('✅ [FCM:TOKEN] Token saved to SharedPreferences');
+      await MsgHeader.syncFcmToken(token);
     } else {
       print('❌ [FCM:TOKEN] FCM Token is null!');
     }
@@ -473,9 +491,14 @@ Future<void> initializeNotifications() async {
 
   const DarwinInitializationSettings initializationSettingsIOS =
       DarwinInitializationSettings(
-    requestAlertPermission: true,
-    requestBadgePermission: true,
-    requestSoundPermission: true,
+    requestAlertPermission: false,
+    requestBadgePermission: false,
+    requestSoundPermission: false,
+    defaultPresentAlert: true,
+    defaultPresentBadge: true,
+    defaultPresentSound: true,
+    defaultPresentBanner: true,
+    defaultPresentList: true,
   );
 
   const InitializationSettings initializationSettings = InitializationSettings(
@@ -538,6 +561,8 @@ Future<void> _showFcmLocalNotification(RemoteMessage message) async {
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
+        presentBanner: true,
+        presentList: true,
       ),
     ),
     payload: payload,
@@ -594,8 +619,13 @@ Future<void> _initializeFirebaseAndFCM() async {
       return;
     }
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('✅ [FCM:INIT] User granted notification permission');
+    final permissionGranted =
+        settings.authorizationStatus == AuthorizationStatus.authorized ||
+            settings.authorizationStatus == AuthorizationStatus.provisional;
+
+    if (permissionGranted) {
+      print(
+          '✅ [FCM:INIT] User granted notification permission (${settings.authorizationStatus})');
 
       if (Platform.isIOS) {
         await messaging.setForegroundNotificationPresentationOptions(
@@ -606,37 +636,44 @@ Future<void> _initializeFirebaseAndFCM() async {
         print('✅ [FCM:INIT] iOS foreground presentation options set');
       }
 
-      // Get and save FCM token with timeout
-      print('🚀 [FCM:INIT] Step 5: Getting FCM token...');
-      try {
-        final token = await getAndSaveFcmToken().timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {
-            print('⚠️ [FCM:INIT] FCM token generation timeout');
-            return null;
-          },
-        );
-        if (token != null) {
-          print(
-              '✅ [FCM:INIT] FCM token obtained: ${token.substring(0, 20)}...');
-        } else {
-          print('❌ [FCM:INIT] FCM token is null!');
+      // Don't block app launch on APNs. Listeners must be ready first.
+      print('🚀 [FCM:INIT] Step 5: Getting FCM token in background...');
+      unawaited(() async {
+        try {
+          final token = await getAndSaveFcmToken();
+          if (token != null) {
+            print(
+                '✅ [FCM:INIT] FCM token obtained: ${token.substring(0, 20)}...');
+            await MsgHeader.syncFcmToken(token);
+          } else {
+            print('❌ [FCM:INIT] FCM token is null — will retry in background');
+            await _retryBindFcmToken();
+          }
+        } catch (e) {
+          print('❌ [FCM:INIT] Error getting FCM token: $e');
+          await _retryBindFcmToken();
         }
-      } catch (e) {
-        print('❌ [FCM:INIT] Error getting FCM token: $e');
-      }
-      await _debugPrintAuthState(context: 'startup_after_token');
+        await _debugPrintAuthState(context: 'startup_after_token');
+      }());
 
       // Listen for token refresh
       print('🚀 [FCM:INIT] Step 6: Setting up token refresh listener...');
-      messaging.onTokenRefresh.listen((String newToken) {
+      messaging.onTokenRefresh.listen((String newToken) async {
         print(
             '🔄 [FCM:TOKEN] FCM Token refreshed: ${newToken.substring(0, 20)}...');
         fcmToken = newToken;
-        saveFcmTokenToLocal(newToken);
-        _debugPrintAuthState(context: 'token_refresh');
+        await saveFcmTokenToLocal(newToken);
+        await MsgHeader.syncFcmToken(newToken);
+        await _debugPrintAuthState(context: 'token_refresh');
       });
       print('✅ [FCM:INIT] Token refresh listener registered');
+
+      try {
+        await messaging.subscribeToTopic('v2rp_ios_debug');
+        print('✅ [FCM:INIT] Subscribed to topic v2rp_ios_debug');
+      } catch (e) {
+        print('⚠️ [FCM:INIT] Topic subscribe failed: $e');
+      }
 
       // Handle foreground messages
       print(
@@ -655,7 +692,6 @@ Future<void> _initializeFirebaseAndFCM() async {
             '🔔 [FCM:onMessage] Has notification: ${message.notification != null}');
         print('🔔 [FCM:onMessage] Has data: ${message.data.isNotEmpty}');
 
-        // Tampilkan notifikasi juga untuk pesan data-only
         if (message.notification != null || message.data.isNotEmpty) {
           print(
               '🔔 [FCM:onMessage] Showing local notification for incoming FCM');
@@ -740,7 +776,10 @@ Future<void> _initializeFirebaseAndFCM() async {
           '❌ [FCM:INIT] User declined or has not accepted notification permissions');
       print(
           '❌ [FCM:INIT] Authorization status: ${settings.authorizationStatus}');
-      print('❌ [FCM:INIT] FCM will not work without notification permissions!');
+      print('❌ [FCM:INIT] Visible alerts require notification permission.');
+      // Still try to obtain a token so pushes bind once the user enables
+      // notifications later in iOS Settings.
+      unawaited(_retryBindFcmToken());
     }
   } catch (e, stackTrace) {
     print('❌ [FCM:INIT] ==========================================');
@@ -748,6 +787,23 @@ Future<void> _initializeFirebaseAndFCM() async {
     print('❌ [FCM:INIT] Stack trace: $stackTrace');
     print('❌ [FCM:INIT] ==========================================');
     // Continue even if Firebase fails to initialize
+  }
+}
+
+Future<void> _retryBindFcmToken() async {
+  for (var attempt = 1; attempt <= 5; attempt++) {
+    await Future.delayed(Duration(seconds: attempt * 3));
+    print('🔄 [FCM:TOKEN] Retry bind attempt $attempt/5');
+    try {
+      final token = await getAndSaveFcmToken();
+      if (token != null) {
+        await MsgHeader.syncFcmToken(token);
+        print('✅ [FCM:TOKEN] Token bound on retry $attempt');
+        return;
+      }
+    } catch (e) {
+      print('❌ [FCM:TOKEN] Retry $attempt failed: $e');
+    }
   }
 }
 

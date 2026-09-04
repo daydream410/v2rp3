@@ -229,9 +229,8 @@ class _SettingScreenState extends State<SettingScreen> {
                         _buildProfileBody(isTablet),
                         const SizedBox(height: 12),
                         _buildActionButton(
-                          label: _isLoadingRoles
-                              ? 'Loading...'
-                              : 'Change Company',
+                          label:
+                              _isLoadingRoles ? 'Loading...' : 'Change Company',
                           icon: Icons.business_center_outlined,
                           color: ApprovalMenuTheme.primary,
                           onPressed:
@@ -336,9 +335,7 @@ class _SettingScreenState extends State<SettingScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  (finalEmail?.isNotEmpty ?? false)
-                      ? finalEmail!
-                      : '—',
+                  (finalEmail?.isNotEmpty ?? false) ? finalEmail! : '—',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: isTablet ? 14 : 13,
@@ -605,7 +602,7 @@ class _SettingScreenState extends State<SettingScreen> {
           ),
           const Spacer(),
           Text(
-            '1.4.0',
+            '1.4.1',
             style: TextStyle(
               fontSize: isTablet ? 15 : 14,
               fontWeight: FontWeight.bold,
@@ -995,8 +992,7 @@ class _SettingScreenState extends State<SettingScreen> {
                                   ApprovalPendingSummary.empty;
                               final showBadgeLoader = _isLoadingRoleBadges &&
                                   !_pendingBySeckey.containsKey(seckey);
-                              final currentRole =
-                                  _profileData?['role'] ?? '';
+                              final currentRole = _profileData?['role'] ?? '';
                               final currentCompany =
                                   _profileData?['company'] ?? '';
                               final isCurrentRole =
@@ -1140,8 +1136,7 @@ class _SettingScreenState extends State<SettingScreen> {
                                                       style: TextStyle(
                                                         fontSize:
                                                             roleCompanyFontSize,
-                                                        color:
-                                                            Colors.grey[600],
+                                                        color: Colors.grey[600],
                                                       ),
                                                     ),
                                                   ],
@@ -1227,88 +1222,39 @@ class _SettingScreenState extends State<SettingScreen> {
 
       String platform = Platform.isAndroid ? 'android' : 'ios';
 
-      var headers = {
-        'Content-Type': 'application/json',
-      };
-
-      var request = http.Request(
-        'POST',
-        Uri.parse('https://v2rp.net/api/v2/mobile/choose/role/$seckey'),
+      await MsgHeader.chooseRole(
+        seckey,
+        fcmToken ?? '',
+        platform,
       );
 
-      request.body = jsonEncode({
-        'fcmtoken': fcmToken ?? '',
-        'platform': platform,
-      });
+      if (MsgHeader.roleSuccess == true &&
+          (MsgHeader.kulonuwun ?? '').toString().isNotEmpty &&
+          (MsgHeader.monggo ?? '').toString().isNotEmpty) {
+        await prefs.setString('kulonuwun', MsgHeader.kulonuwun ?? '');
+        await prefs.setString('monggo', MsgHeader.monggo ?? '');
 
-      request.headers.addAll(headers);
+        // Refresh profile + pending approvals for the new company session.
+        await fetchProfile();
+        await approvalReloadAfterCompanyChange();
 
-      var streamedResponse = await request.send().timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          throw TimeoutException('Connection timeout. Please try again.');
-        },
-      );
-
-      var response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        var responseData = jsonDecode(response.body);
-
-        if (responseData['success'] == true && responseData['data'] != null) {
-          var data = responseData['data'] as Map<String, dynamic>;
-          String? newKulonuwun = data['kulonuwun'];
-          String? newMonggo = data['monggo'];
-
-          if (newKulonuwun != null && newMonggo != null) {
-            final SharedPreferences prefs =
-                await SharedPreferences.getInstance();
-            await prefs.setString('kulonuwun', newKulonuwun);
-            await prefs.setString('monggo', newMonggo);
-            MsgHeader.kulonuwun = newKulonuwun;
-            MsgHeader.monggo = newMonggo;
-
-            // Refresh profile + pending approvals for the new company session.
-            await fetchProfile();
-            await approvalReloadAfterCompanyChange();
-
-            if (mounted) {
-              QuickAlert.show(
-                context: context,
-                type: QuickAlertType.success,
-                title: 'Success',
-                text: 'Company changed successfully',
-                barrierDismissible: true,
-                confirmBtnColor: HexColor("#F4A62A"),
-                onConfirmBtnTap: () {
-                  Navigator.of(context).pop();
-                  // Navigate to navbar to refresh the app
-                  Get.offAll(const Navbar());
-                },
-              );
-            }
-          } else {
-            throw Exception('Invalid response data');
-          }
-        } else {
+        if (mounted) {
           QuickAlert.show(
             context: context,
-            type: QuickAlertType.error,
-            title: 'Error',
-            text: responseData['message'] ?? 'Failed to change company',
+            type: QuickAlertType.success,
+            title: 'Success',
+            text: 'Company changed successfully',
             barrierDismissible: true,
             confirmBtnColor: HexColor("#F4A62A"),
+            onConfirmBtnTap: () {
+              Navigator.of(context).pop();
+              // Navigate to navbar to refresh the app
+              Get.offAll(const Navbar());
+            },
           );
         }
       } else {
-        QuickAlert.show(
-          context: context,
-          type: QuickAlertType.error,
-          title: 'Error',
-          text: 'Failed to change company. Status: ${response.statusCode}',
-          barrierDismissible: true,
-          confirmBtnColor: HexColor("#F4A62A"),
-        );
+        throw Exception(MsgHeader.roleMessage ?? 'Failed to select company');
       }
     } on TimeoutException {
       QuickAlert.show(

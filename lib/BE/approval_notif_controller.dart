@@ -501,16 +501,23 @@ Future<Map<String, ApprovalPendingSummary>> approvalProbePendingCountsForRoles(
   final platform = Platform.isAndroid ? 'android' : 'ios';
   final summaries = <String, ApprovalPendingSummary>{};
 
+  print(
+      'ℹ️ [FCM:PROBE] Probing ${roles.length} roles (token present: ${fcmToken.isNotEmpty})');
+
   try {
     for (final role in roles) {
       final seckey = role['seckey']?.toString() ?? '';
       if (seckey.isEmpty) continue;
       try {
+        // Backend returns 400 if fcmtoken is omitted. Send the real token so
+        // /notif can be queried, then re-bind it to the active company in
+        // finally so the last probed role does not keep iOS push.
         await MsgHeader.chooseRole(
           seckey,
           fcmToken,
           platform,
           persist: false,
+          registerFcm: fcmToken.isNotEmpty,
         );
         if (MsgHeader.roleSuccess != true) {
           summaries[seckey] = ApprovalPendingSummary.empty;
@@ -533,7 +540,14 @@ Future<Map<String, ApprovalPendingSummary>> approvalProbePendingCountsForRoles(
       }
     }
   } finally {
-    if (originalKulonuwun != null &&
+    final currentKulonuwun = prefs.getString('kulonuwun');
+    final sessionChangedDuringProbe = currentKulonuwun != null &&
+        currentKulonuwun.isNotEmpty &&
+        currentKulonuwun != originalKulonuwun;
+    if (sessionChangedDuringProbe) {
+      print(
+          'ℹ️ [FCM:PROBE] Session changed during probe — keeping the newly selected company');
+    } else if (originalKulonuwun != null &&
         originalKulonuwun.isNotEmpty &&
         originalMonggo != null &&
         originalMonggo.isNotEmpty) {
@@ -546,6 +560,10 @@ Future<Map<String, ApprovalPendingSummary>> approvalProbePendingCountsForRoles(
       await prefs.remove('monggo');
       MsgHeader.kulonuwun = originalHeaderK ?? '';
       MsgHeader.monggo = originalHeaderM ?? '';
+    }
+
+    if (fcmToken.isNotEmpty) {
+      await MsgHeader.syncFcmToken(fcmToken);
     }
   }
 

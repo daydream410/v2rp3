@@ -341,21 +341,36 @@ class MsgHeader {
 
   static Future<void> chooseRole(
       String seckey, String fcmToken, String platform,
-      {bool persist = true}) async {
+      {bool persist = true, bool registerFcm = true}) async {
     roleSuccess = false;
     roleMessage = '';
+    final previousKulonuwun = kulonuwun;
+    final previousMonggo = monggo;
     kulonuwun = '';
     monggo = '';
 
     try {
+      final body = <String, dynamic>{
+        'platform': platform,
+      };
+      if (registerFcm && fcmToken.isNotEmpty) {
+        body['fcmtoken'] = fcmToken;
+      } else if (registerFcm) {
+        print(
+            '⚠️ [FCM:REGISTER] FCM token empty — omit fcmtoken so backend does not unbind this device');
+      }
+
+      final tokenPreview = (!registerFcm || fcmToken.isEmpty)
+          ? 'omitted'
+          : '${fcmToken.substring(0, fcmToken.length > 20 ? 20 : fcmToken.length)}...';
+      print(
+          '🔑 [FCM:REGISTER] chooseRole persist=$persist registerFcm=$registerFcm platform=$platform token=$tokenPreview');
+
       var response = await http
           .post(
         Uri.parse('https://v2rp.net/api/v2/mobile/choose/role/$seckey'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "fcmtoken": fcmToken,
-          "platform": platform,
-        }),
+        body: jsonEncode(body),
       )
           .timeout(
         const Duration(seconds: 30),
@@ -368,6 +383,8 @@ class MsgHeader {
         var hasil = jsonDecode(response.body);
         roleSuccess = hasil['success'] ?? false;
         roleMessage = hasil['message'] ?? '';
+        print(
+            '🔑 [FCM:REGISTER] chooseRole result success=$roleSuccess message=$roleMessage');
 
         if (roleSuccess == true && hasil['data'] != null) {
           var data = hasil['data'];
@@ -379,6 +396,7 @@ class MsgHeader {
                 await SharedPreferences.getInstance();
             await prefs.setString('kulonuwun', kulonuwun);
             await prefs.setString('monggo', monggo);
+            await prefs.setString('selected_seckey', seckey);
           }
         } else {
           roleSuccess = false;
@@ -388,20 +406,105 @@ class MsgHeader {
         roleMessage = 'Failed to select role';
         print('Choose role failed with status code: ${response.statusCode}');
       }
+
+      if (roleSuccess != true && persist) {
+        kulonuwun = previousKulonuwun;
+        monggo = previousMonggo;
+      }
     } on TimeoutException {
       roleSuccess = false;
       roleMessage = 'Connection timeout. Please try again.';
+      if (persist) {
+        kulonuwun = previousKulonuwun;
+        monggo = previousMonggo;
+      }
       rethrow;
     } on SocketException {
       roleSuccess = false;
       roleMessage = 'No internet connection. Please check your network.';
+      if (persist) {
+        kulonuwun = previousKulonuwun;
+        monggo = previousMonggo;
+      }
       rethrow;
     } catch (e) {
       roleSuccess = false;
       roleMessage = 'Error selecting role: $e';
       print('Choose role error: $e');
+      if (persist) {
+        kulonuwun = previousKulonuwun;
+        monggo = previousMonggo;
+      }
       rethrow;
     }
+  }
+
+  /// Re-binds the current FCM token to the selected company session.
+  /// Needed after app restart / token refresh because choose/role is otherwise
+  /// only called when the user picks a company.
+  static Future<void> syncFcmToken(String token) async {
+    if (token.isEmpty) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final kulonuwun = prefs.getString('kulonuwun');
+      final monggo = prefs.getString('monggo');
+      if (kulonuwun == null ||
+          kulonuwun.isEmpty ||
+          monggo == null ||
+          monggo.isEmpty) {
+        print('ℹ️ [FCM:REGISTER] No session — skip token sync');
+        return;
+      }
+
+      var selectedSeckey = prefs.getString('selected_seckey');
+      if (selectedSeckey == null || selectedSeckey.isEmpty) {
+        selectedSeckey = _seckeyFromStoredRoles(prefs, kulonuwun);
+      }
+      if (selectedSeckey == null || selectedSeckey.isEmpty) {
+        print('ℹ️ [FCM:REGISTER] No selected_seckey — skip token sync');
+        return;
+      }
+
+      final platform = Platform.isAndroid ? 'android' : 'ios';
+      print('🔑 [FCM:REGISTER] Syncing FCM token to current company session');
+      await chooseRole(selectedSeckey, token, platform, persist: true);
+    } catch (e) {
+      print('❌ [FCM:REGISTER] Failed to sync FCM token: $e');
+    }
+  }
+
+  static String? _seckeyFromStoredRoles(
+      SharedPreferences prefs, String kulonuwun) {
+    try {
+      final rolesJson = prefs.getString('otp_roles');
+      if (rolesJson == null || rolesJson.isEmpty) return null;
+      final decoded = jsonDecode(rolesJson);
+      if (decoded is! List || decoded.isEmpty) return null;
+      if (decoded.length == 1) {
+        return decoded.first['seckey']?.toString();
+      }
+
+      final parts = kulonuwun.split('.');
+      if (parts.length < 2) return null;
+      final payload = utf8.decode(
+        base64Url.decode(base64Url.normalize(parts[1])),
+      );
+      final claims = jsonDecode(payload) as Map<String, dynamic>;
+      final company = claims['company']?.toString();
+      final role = claims['role']?.toString();
+
+      for (final item in decoded) {
+        if (item is Map &&
+            item['company']?.toString() == company &&
+            item['role']?.toString() == role) {
+          return item['seckey']?.toString();
+        }
+      }
+    } catch (e) {
+      print('ℹ️ [FCM:REGISTER] Could not infer seckey: $e');
+    }
+    return null;
   }
 }
 
