@@ -1,12 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:v2rp3/utils/hex_color.dart';
-import 'package:data_table_2/data_table_2.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/FE/approval_screen/inventory_approval/it_approval/it_app.dart';
@@ -20,7 +18,6 @@ import 'package:v2rp3/BE/controller.dart';
 import 'package:v2rp3/routes/api_name.dart';
 
 import '../../../../BE/reqip.dart';
-import '../../../../BE/resD.dart';
 import '../../../../main.dart';
 
 class ItApp2 extends StatefulWidget {
@@ -89,7 +86,6 @@ class _ItApp2State extends State<ItApp2> {
     });
   }
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
-    final amount = approvalLineAmount(e as Map);
     return [
       ApprovalInfoField('SPPBJ No', (e['sppbjno'] ?? '').toString()),
       ApprovalInfoField('Project ID', (e['projectid'] ?? '').toString()),
@@ -99,8 +95,6 @@ class _ItApp2State extends State<ItApp2> {
       ApprovalInfoField('From WH', (e['warehouse'] ?? '').toString()),
       ApprovalInfoField('QTY Req', (e['qty'].toString())),
       ApprovalInfoField('QTY Deliver', (e['qtyrcvd'].toString())),
-      ApprovalInfoField('Price', ApprovalTheme.currencyFmt.format(approvalToDouble(e['harga']))),
-      ApprovalInfoField('Amount', ApprovalTheme.currencyFmt.format(amount)),
       ApprovalInfoField('Remarks', (e['rem'] ?? '').toString()),
     ];
   }
@@ -160,6 +154,8 @@ class _ItApp2State extends State<ItApp2> {
         body: _buildBody(),
         bottomBar: ApprovalDetailBottomBar(
           totalPrice: _detailTotal, itemCount: dataaa.length,
+          totalLabel: 'Items',
+          showTotalAmount: false,
           selectedAction: hasAction ? valueStatus : null,
           actionColor: hasAction ? ApprovalTheme.primary : null,
           idleHint: 'Select an action to continue',

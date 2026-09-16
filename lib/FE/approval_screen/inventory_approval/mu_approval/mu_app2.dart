@@ -1,12 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:v2rp3/utils/hex_color.dart';
-import 'package:data_table_2/data_table_2.dart';
 import 'package:intl/intl.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -77,7 +75,6 @@ class _MuApp2State extends State<MuApp2> {
     });
   }
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
-    final amount = approvalLineAmount(e as Map);
     return [
       ApprovalInfoField('SPPBJ No', (e['sppbjno'] ?? '').toString()),
       ApprovalInfoField('Project Name', (e['projectname'] ?? e['projectid'] ?? '').toString()),
@@ -88,8 +85,6 @@ class _MuApp2State extends State<MuApp2> {
       ApprovalInfoField('WH Name', (e['warehousename'] ?? '').toString()),
       ApprovalInfoField('QTY Req', (e['qty'].toString())),
       ApprovalInfoField('QTY Realize', (e['qtyrcvd'].toString())),
-      ApprovalInfoField('Price', ApprovalTheme.currencyFmt.format(approvalToDouble(e['harga']))),
-      ApprovalInfoField('Amount', ApprovalTheme.currencyFmt.format(amount)),
       ApprovalInfoField('Remarks', (e['rem'] ?? '').toString()),
     ];
   }
@@ -149,6 +144,8 @@ class _MuApp2State extends State<MuApp2> {
         body: _buildBody(),
         bottomBar: ApprovalDetailBottomBar(
           totalPrice: totalPrice, itemCount: dataaa.length,
+          totalLabel: 'Items',
+          showTotalAmount: false,
           selectedAction: hasAction ? valueStatus : null,
           actionColor: hasAction ? ApprovalTheme.primary : null,
           idleHint: 'Select an action to continue',

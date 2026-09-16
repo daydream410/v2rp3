@@ -80,17 +80,39 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
       }
     }
 
-    if (mounted) {
-      setState(() => _isLoadingRoles = false);
-    }
-
     if (_roles.isNotEmpty) {
-      unawaited(_loadPendingBadges());
+      final cached = await approvalLoadPendingSummaryCache();
+      if (mounted) {
+        setState(() {
+          for (final role in _roles) {
+            final seckey = role['seckey']?.toString() ?? '';
+            final summary = cached[seckey];
+            if (summary != null) _pendingBySeckey[seckey] = summary;
+          }
+          _isLoadingRoles = false;
+        });
+      }
+
+      final hasMissingBadges = _roles.any((role) {
+        final seckey = role['seckey']?.toString() ?? '';
+        return seckey.isNotEmpty && !_pendingBySeckey.containsKey(seckey);
+      });
+      if (hasMissingBadges) {
+        unawaited(_loadPendingBadges());
+      }
+    } else if (mounted) {
+      setState(() => _isLoadingRoles = false);
     }
   }
 
   Future<void> _loadPendingBadges() async {
     if (!mounted || _roles.isEmpty) return;
+    final rolesToLoad = _roles.where((role) {
+      final seckey = role['seckey']?.toString() ?? '';
+      return seckey.isNotEmpty && !_pendingBySeckey.containsKey(seckey);
+    }).toList(growable: false);
+    if (rolesToLoad.isEmpty) return;
+
     setState(() => _isLoadingBadges = true);
 
     try {
@@ -101,7 +123,7 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
       }
 
       await approvalProbePendingCountsForRoles(
-        _roles,
+        rolesToLoad,
         fcmToken: fcmToken ?? '',
         onSummary: (seckey, summary) {
           if (!mounted) return;

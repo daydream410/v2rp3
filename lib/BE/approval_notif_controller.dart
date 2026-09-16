@@ -232,18 +232,14 @@ class ApprovalPendingSummary {
         ApprovalPendingMenu(label: 'CA Set Confirm', count: t.totalLC),
       if (t.totalLA > 0)
         ApprovalPendingMenu(label: 'CA Set Approval', count: t.totalLA),
-      if (t.totalARRA > 0)
-        ApprovalPendingMenu(label: 'AR', count: t.totalARRA),
+      if (t.totalARRA > 0) ApprovalPendingMenu(label: 'AR', count: t.totalARRA),
       if (t.totalSOA > 0)
         ApprovalPendingMenu(label: 'Sales Order', count: t.totalSOA),
       if (t.totalSC > 0)
         ApprovalPendingMenu(label: 'SPPBJ Confirm', count: t.totalSC),
-      if (t.totalSA > 0)
-        ApprovalPendingMenu(label: 'SPPBJ', count: t.totalSA),
-      if (t.totalPA > 0)
-        ApprovalPendingMenu(label: 'AP', count: t.totalPA),
-      if (t.totalNA > 0)
-        ApprovalPendingMenu(label: 'New AP', count: t.totalNA),
+      if (t.totalSA > 0) ApprovalPendingMenu(label: 'SPPBJ', count: t.totalSA),
+      if (t.totalPA > 0) ApprovalPendingMenu(label: 'AP', count: t.totalPA),
+      if (t.totalNA > 0) ApprovalPendingMenu(label: 'New AP', count: t.totalNA),
       if (t.totalDPA > 0)
         ApprovalPendingMenu(label: 'DP Req', count: t.totalDPA),
       if (t.totalAPRA > 0)
@@ -256,12 +252,9 @@ class ApprovalPendingSummary {
         ApprovalPendingMenu(label: 'PO Exception', count: t.poGabung),
       if (t.supplierGabung > 0)
         ApprovalPendingMenu(label: 'PO SCM', count: t.supplierGabung),
-      if (t.totalMUA > 0)
-        ApprovalPendingMenu(label: 'MU', count: t.totalMUA),
-      if (t.totalGRA > 0)
-        ApprovalPendingMenu(label: 'GR', count: t.totalGRA),
-      if (t.totalITA > 0)
-        ApprovalPendingMenu(label: 'IT', count: t.totalITA),
+      if (t.totalMUA > 0) ApprovalPendingMenu(label: 'MU', count: t.totalMUA),
+      if (t.totalGRA > 0) ApprovalPendingMenu(label: 'GR', count: t.totalGRA),
+      if (t.totalITA > 0) ApprovalPendingMenu(label: 'IT', count: t.totalITA),
       if (t.totalSMA > 0)
         ApprovalPendingMenu(label: 'Stock Move', count: t.totalSMA),
       if (t.totalSAA > 0)
@@ -270,8 +263,7 @@ class ApprovalPendingSummary {
         ApprovalPendingMenu(label: 'Stock Topup', count: t.totalSTUA),
       if (t.totalAA > 0)
         ApprovalPendingMenu(label: 'Assembling', count: t.totalAA),
-      if (t.totalMRA > 0)
-        ApprovalPendingMenu(label: 'MR', count: t.totalMRA),
+      if (t.totalMRA > 0) ApprovalPendingMenu(label: 'MR', count: t.totalMRA),
       if (t.totalSTA > 0)
         ApprovalPendingMenu(label: 'Stock Transfer', count: t.totalSTA),
       if (t.itGabung > 0)
@@ -296,11 +288,108 @@ class ApprovalPendingSummary {
   }
 }
 
+const _pendingSummaryCacheKey = 'approval_pending_summary_cache_v1';
+Future<void> _pendingSummaryCacheWrite = Future<void>.value();
+
+Map<String, dynamic> _pendingSummaryToJson(ApprovalPendingSummary summary) {
+  return {
+    'total': summary.total,
+    'menus': summary.menus
+        .map((menu) => {'label': menu.label, 'count': menu.count})
+        .toList(growable: false),
+  };
+}
+
+ApprovalPendingSummary? _pendingSummaryFromJson(dynamic value) {
+  if (value is! Map) return null;
+
+  final menus = <ApprovalPendingMenu>[];
+  final rawMenus = value['menus'];
+  if (rawMenus is List) {
+    for (final rawMenu in rawMenus) {
+      if (rawMenu is! Map) continue;
+      final label = rawMenu['label']?.toString() ?? '';
+      final count = int.tryParse(rawMenu['count']?.toString() ?? '') ?? 0;
+      if (label.isNotEmpty && count > 0) {
+        menus.add(ApprovalPendingMenu(label: label, count: count));
+      }
+    }
+  }
+
+  final total = int.tryParse(value['total']?.toString() ?? '') ?? 0;
+  return ApprovalPendingSummary(total: total, menus: menus);
+}
+
+/// Returns persisted badge summaries keyed by role seckey.
+Future<Map<String, ApprovalPendingSummary>>
+    approvalLoadPendingSummaryCache() async {
+  await _pendingSummaryCacheWrite;
+  final prefs = await SharedPreferences.getInstance();
+  final raw = prefs.getString(_pendingSummaryCacheKey);
+  if (raw == null || raw.isEmpty) return {};
+
+  try {
+    final decoded = json.decode(raw);
+    if (decoded is! Map) return {};
+
+    final result = <String, ApprovalPendingSummary>{};
+    decoded.forEach((key, value) {
+      final summary = _pendingSummaryFromJson(value);
+      if (summary != null) result[key.toString()] = summary;
+    });
+    return result;
+  } catch (_) {
+    return {};
+  }
+}
+
+/// Merges fresh badge summaries into the persistent per-company cache.
+Future<void> approvalCachePendingSummaries(
+  Map<String, ApprovalPendingSummary> summaries,
+) {
+  if (summaries.isEmpty) return Future<void>.value();
+
+  final write = _pendingSummaryCacheWrite.then((_) async {
+    final prefs = await SharedPreferences.getInstance();
+    final merged = <String, dynamic>{};
+    final raw = prefs.getString(_pendingSummaryCacheKey);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = json.decode(raw);
+        if (decoded is Map) {
+          decoded.forEach((key, value) {
+            merged[key.toString()] = value;
+          });
+        }
+      } catch (_) {
+        // Replace malformed cache with fresh values below.
+      }
+    }
+    summaries.forEach((seckey, summary) {
+      if (seckey.isNotEmpty) {
+        merged[seckey] = _pendingSummaryToJson(summary);
+      }
+    });
+    await prefs.setString(_pendingSummaryCacheKey, json.encode(merged));
+  });
+  _pendingSummaryCacheWrite = write.catchError((_) {});
+  return write;
+}
+
+Future<void> approvalCachePendingSummary(
+  String seckey,
+  ApprovalPendingSummary summary,
+) {
+  if (seckey.isEmpty) return Future<void>.value();
+  return approvalCachePendingSummaries({seckey: summary});
+}
+
 class ApprovalNotifController extends GetxController {
   static const cacheTtl = Duration(minutes: 3);
   static const _timeoutDuration = Duration(minutes: 5);
 
   final totals = ApprovalNotifTotals.empty.obs;
+
   /// Raw pending transactions from `/api/v1/mobile/notif` for the active company.
   final items = <Map<String, dynamic>>[].obs;
   final isInitialLoading = true.obs;
@@ -309,6 +398,7 @@ class ApprovalNotifController extends GetxController {
 
   DateTime? _fetchedAt;
   bool _isFetching = false;
+  bool _forceRefreshQueued = false;
   Timer? _timeoutTimer;
 
   bool get hasCache => _fetchedAt != null;
@@ -332,6 +422,7 @@ class ApprovalNotifController extends GetxController {
   void resetForNewCompanySession() {
     _timeoutTimer?.cancel();
     _isFetching = false;
+    _forceRefreshQueued = false;
     _fetchedAt = null;
     totals.value = ApprovalNotifTotals.empty;
     items.clear();
@@ -350,7 +441,10 @@ class ApprovalNotifController extends GetxController {
   /// Loads notification counts. Returns true when session expired (kode 77).
   /// Skips network when cache is still fresh unless [force] is true.
   Future<bool> load({bool force = false}) async {
-    if (_isFetching) return sessionExpired.value;
+    if (_isFetching) {
+      if (force) _forceRefreshQueued = true;
+      return sessionExpired.value;
+    }
     if (!force && isCacheFresh) return sessionExpired.value;
 
     _isFetching = true;
@@ -408,6 +502,12 @@ class ApprovalNotifController extends GetxController {
       totals.value = ApprovalNotifTotals.fromItems(parsed);
       _fetchedAt = DateTime.now();
       sessionExpired.value = false;
+      final selectedSeckey =
+          sharedPreferences.getString('selected_seckey') ?? '';
+      await approvalCachePendingSummary(
+        selectedSeckey,
+        ApprovalPendingSummary.fromTotals(totals.value),
+      );
     } catch (e) {
       // Keep previous totals on error when cache exists.
       if (!hasCache) {
@@ -419,6 +519,10 @@ class ApprovalNotifController extends GetxController {
       _isFetching = false;
       isInitialLoading.value = false;
       isRefreshing.value = false;
+      if (_forceRefreshQueued) {
+        _forceRefreshQueued = false;
+        unawaited(load(force: true));
+      }
     }
     return expired;
   }
@@ -534,11 +638,13 @@ Future<Map<String, ApprovalPendingSummary>> approvalProbePendingCountsForRoles(
               );
         summaries[seckey] = summary;
         onSummary?.call(seckey, summary);
+        await approvalCachePendingSummary(seckey, summary);
       } catch (_) {
         summaries[seckey] = ApprovalPendingSummary.empty;
         onSummary?.call(seckey, ApprovalPendingSummary.empty);
       }
     }
+    await approvalCachePendingSummaries(summaries);
   } finally {
     final currentKulonuwun = prefs.getString('kulonuwun');
     final sessionChangedDuringProbe = currentKulonuwun != null &&

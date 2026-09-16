@@ -2778,6 +2778,7 @@ class ApprovalDetailBottomBar extends StatelessWidget {
   final String idleHint;
   final String totalLabel;
   final bool quantityTotal;
+  final bool showTotalAmount;
 
   const ApprovalDetailBottomBar({
     super.key,
@@ -2790,6 +2791,7 @@ class ApprovalDetailBottomBar extends StatelessWidget {
     this.idleHint = 'Select an action to continue',
     this.totalLabel = 'Total Amount',
     this.quantityTotal = false,
+    this.showTotalAmount = true,
   });
 
   bool get _hasAction =>
@@ -2873,15 +2875,17 @@ class ApprovalDetailBottomBar extends StatelessWidget {
                             ],
                           ],
                         ),
-                        const SizedBox(height: 1),
-                        Text(totalText,
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: ApprovalTheme.primary,
-                                height: 1.2),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
+                        if (showTotalAmount) ...[
+                          const SizedBox(height: 1),
+                          Text(totalText,
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: ApprovalTheme.primary,
+                                  height: 1.2),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ],
                         Padding(
                           padding: const EdgeInsets.only(top: 3),
                           child: _hasAction
