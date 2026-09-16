@@ -10,6 +10,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/BE/reqip.dart';
+import 'package:v2rp3/BE/approval_notif_controller.dart';
 import 'package:v2rp3/FE/mainScreen/login_screen4.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart' as navbar_module;
@@ -115,42 +116,178 @@ Future<void> _debugPrintAuthState({String context = 'unknown'}) async {
 // Global navigator key for navigation
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+bool _isHandlingNotificationTap = false;
+
 // Function to handle notification navigation
-void _handleNotificationNavigation(String payload) {
+Future<void> _handleNotificationNavigation(String payload) async {
+  if (_isHandlingNotificationTap) {
+    print('Notification tap is already being handled');
+    return;
+  }
+
+  _isHandlingNotificationTap = true;
   try {
-    final data = jsonDecode(payload);
-    final String? route = data['route'] as String?;
-    final String? screen = data['screen'] as String?;
-    final String? type = data['type'] as String?;
-    final String? company = data['company'] as String?;
-    final String? role = data['role'] as String?;
-    final String? reffno = data['reffno'] as String?;
-    final String? seckeyPayload = data['seckey'] as String?;
-    final Map<String, dynamic>? extraData =
-        data['data'] as Map<String, dynamic>?;
+    final decoded = jsonDecode(payload);
+    if (decoded is! Map) {
+      throw const FormatException('Notification payload must be an object');
+    }
+    final data = Map<String, dynamic>.from(decoded);
+    final String? route = data['route']?.toString();
+    final String? screen = data['screen']?.toString();
+    final String? type = data['type']?.toString();
+    final String? company = data['company']?.toString();
+    final String? role = data['role']?.toString();
+    final String? reffno = data['reffno']?.toString();
+    final String? seckeyPayload = data['seckey']?.toString();
+    final rawExtraData = data['data'];
+    final Map<String, dynamic>? extraData = rawExtraData is Map
+        ? Map<String, dynamic>.from(rawExtraData)
+        : null;
 
     print(
         'Navigating from notification - route: $route, screen: $screen, type: $type, company: $company, role: $role, reffno: $reffno, seckey: $seckeyPayload');
 
     // Check if user is logged in
-    SharedPreferences.getInstance().then((prefs) {
-      final String? kulonuwun = prefs.getString('kulonuwun');
-      final String? monggo = prefs.getString('monggo');
+    final prefs = await SharedPreferences.getInstance();
+    final String? kulonuwun = prefs.getString('kulonuwun');
+    final String? monggo = prefs.getString('monggo');
 
-      if (kulonuwun == null || monggo == null) {
-        print('User not logged in, cannot navigate');
-        _debugPrintAuthState(context: 'notification_no_login');
-        return;
-      }
+    if (kulonuwun == null ||
+        kulonuwun.isEmpty ||
+        monggo == null ||
+        monggo.isEmpty) {
+      print('User not logged in, cannot navigate');
+      await _debugPrintAuthState(context: 'notification_no_login');
+      return;
+    }
 
-      // Navigate based on route/screen/type
-      if (route != null || screen != null || type != null) {
-        _navigateToScreen(
-            route: route, screen: screen, type: type, data: extraData);
-      }
-    });
+    final companyReady = await _activateNotificationCompany(
+      prefs: prefs,
+      company: company,
+      role: role,
+      notificationSeckey: seckeyPayload,
+    );
+    if (!companyReady) {
+      print(
+          'Notification navigation cancelled because the target company could not be activated');
+      return;
+    }
+
+    // Navigate only after the target company session and approval data are ready.
+    if (route != null || screen != null || type != null) {
+      _navigateToScreen(
+          route: route, screen: screen, type: type, data: extraData);
+    }
   } catch (e) {
     print('Error parsing notification payload: $e');
+  } finally {
+    _isHandlingNotificationTap = false;
+  }
+}
+
+Future<bool> _activateNotificationCompany({
+  required SharedPreferences prefs,
+  String? company,
+  String? role,
+  String? notificationSeckey,
+}) async {
+  final targetCompany = company?.trim();
+  if (targetCompany == null || targetCompany.isEmpty) {
+    // Backward compatibility for older notifications without company metadata.
+    return true;
+  }
+
+  try {
+    final rolesJson = prefs.getString('otp_roles');
+    if (rolesJson == null || rolesJson.isEmpty) {
+      print('No stored company roles available for notification switching');
+      return false;
+    }
+
+    final decodedRoles = jsonDecode(rolesJson);
+    if (decodedRoles is! List) {
+      print('Stored company roles have an invalid format');
+      return false;
+    }
+
+    final companyRoles = decodedRoles.whereType<Map>().where((item) {
+      return item['company']?.toString().trim().toLowerCase() ==
+          targetCompany.toLowerCase();
+    }).toList();
+
+    if (companyRoles.isEmpty) {
+      print('User has no access to notification company: $targetCompany');
+      return false;
+    }
+
+    Map<dynamic, dynamic>? targetRole;
+    final targetRoleName = role?.trim();
+    if (targetRoleName != null && targetRoleName.isNotEmpty) {
+      for (final item in companyRoles) {
+        if (item['role']?.toString().trim().toLowerCase() ==
+            targetRoleName.toLowerCase()) {
+          targetRole = item;
+          break;
+        }
+      }
+    }
+
+    // The payload seckey is only used to identify an entry already present in
+    // the user's stored roles; it is never sent directly to chooseRole.
+    if (targetRole == null &&
+        notificationSeckey != null &&
+        notificationSeckey.isNotEmpty) {
+      for (final item in companyRoles) {
+        if (item['seckey']?.toString() == notificationSeckey) {
+          targetRole = item;
+          break;
+        }
+      }
+    }
+
+    if (targetRole == null && companyRoles.length == 1) {
+      targetRole = companyRoles.first;
+    }
+    if (targetRole == null) {
+      print(
+          'Could not uniquely match role "$role" in company $targetCompany');
+      return false;
+    }
+
+    final targetSeckey = targetRole['seckey']?.toString();
+    if (targetSeckey == null || targetSeckey.isEmpty) {
+      print('Stored target company role has no seckey');
+      return false;
+    }
+
+    if (prefs.getString('selected_seckey') == targetSeckey) {
+      print('Notification company is already active: $targetCompany');
+      return true;
+    }
+
+    var token = prefs.getString('fcm_token');
+    if (token == null || token.isEmpty) {
+      token = await getAndSaveFcmToken();
+    }
+
+    final platform = Platform.isAndroid ? 'android' : 'ios';
+    print('Switching session to notification company: $targetCompany');
+    await MsgHeader.chooseRole(targetSeckey, token ?? '', platform);
+
+    if (MsgHeader.roleSuccess != true ||
+        (MsgHeader.kulonuwun ?? '').isEmpty ||
+        (MsgHeader.monggo ?? '').isEmpty) {
+      print('Failed to activate notification company: '
+          '${MsgHeader.roleMessage ?? 'unknown error'}');
+      return false;
+    }
+
+    await approvalReloadAfterCompanyChange();
+    print('Notification company activated: $targetCompany');
+    return true;
+  } catch (e) {
+    print('Error switching notification company: $e');
+    return false;
   }
 }
 
