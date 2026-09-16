@@ -43,7 +43,8 @@ class _PoExAppState extends State<PoExApp> {
       results = gabung;
     } else {
       results = gabung
-          .where((item) => item['header']['pono']
+          .where((item) => _headerOf(item)['pono']
+              .toString()
               .toLowerCase()
               .contains(enteredKeyword.toLowerCase()))
           .toList();
@@ -51,31 +52,41 @@ class _PoExAppState extends State<PoExApp> {
     setState(() => _foundUsers = results);
   }
 
+  Map<String, dynamic> _headerOf(dynamic item) {
+    if (item is! Map) return <String, dynamic>{};
+    final header = item['header'];
+    if (header is Map) return Map<String, dynamic>.from(header);
+    return Map<String, dynamic>.from(item);
+  }
+
+  List<dynamic> _normalizeItems(dynamic rawData, String sourceType) {
+    if (rawData is! List) return <dynamic>[];
+
+    return rawData.whereType<Map>().map((rawItem) {
+      final item = Map<String, dynamic>.from(rawItem);
+      final header = _headerOf(item);
+      header['requestorname'] ??= header['requestor'];
+      item['header'] = header;
+      item['_tipe'] = sourceType;
+      return item;
+    }).toList();
+  }
+
   void _openDetail(dynamic item) {
+    final header = _headerOf(item);
     Get.to(() => PoExApp2(
-                                              seckey: item
-                                                  ['seckey'],
-                                              pono: item['header']
-                                                  ['pono'],
-                                              tanggal: item
-                                                  ['header']['tanggal'],
-                                              requestor: item
-                                                  ['header']['requestor'],
-                                              projectid: item
-                                                  ['header']['projectid'],
-                                              itemcoa: item
-                                                  ['header']['itemcoa'],
-                                              sppbjamount: item
-                                                  ['header']['sppbjamount'],
-                                              poamount: item
-                                                  ['header']['poamount'],
-                                              different: item
-                                                  ['header']['different'],
-                                              budgetavailable:
-                                                  approvalBudgetAvailable(
-                                                      item['header']),
-                                              tipe: tipe,
-                                            ));
+          seckey: item['seckey'],
+          pono: header['pono'],
+          tanggal: header['tanggal'],
+          requestor: header['requestorname'] ?? header['requestor'],
+          projectid: header['projectid'],
+          itemcoa: header['itemcoa'],
+          sppbjamount: header['sppbjamount'],
+          poamount: header['poamount'],
+          different: header['different'],
+          budgetavailable: approvalBudgetAvailable(header),
+          tipe: item['_tipe'] ?? tipe,
+        ));
   }
 
   Widget _buildList() {
@@ -104,11 +115,12 @@ class _PoExAppState extends State<PoExApp> {
         }
         return Column(
           children: _foundUsers.map<Widget>((item) {
-            final header = item['header'];
+            final header = _headerOf(item);
+            final date = DateTime.tryParse(header['tanggal']?.toString() ?? '');
             return ApprovalListCard(
               title: header['pono']?.toString() ?? '-',
               subtitle:
-                  "${header['requestorname'] ?? ''} · ${DateFormat('dd MMM yyyy').format(DateTime.parse(header['tanggal']))}",
+                  "${header['requestorname'] ?? header['requestor'] ?? ''} · ${date == null ? '-' : DateFormat('dd MMM yyyy').format(date)}",
               onTap: () => _openDetail(item),
             );
           }).toList(),
@@ -185,8 +197,8 @@ class _PoExAppState extends State<PoExApp> {
 
       // final data = responseData['data'];
       setState(() {
-        dataaa = responseData['data'];
-        dataaa2 = responseData2['data'];
+        dataaa = _normalizeItems(responseData['data'], '0');
+        dataaa2 = _normalizeItems(responseData2['data'], '1');
         gabung = dataaa + dataaa2;
         _foundUsers = gabung;
         tipe = '0';
@@ -211,5 +223,6 @@ class _PoExAppState extends State<PoExApp> {
       print(e);
     }
   }
+
   Future<void> getDataa2() async => getDataa();
 }

@@ -2,13 +2,11 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:v2rp3/utils/hex_color.dart';
-import 'package:data_table_2/data_table_2.dart';
 import 'package:intl/intl.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -72,11 +70,16 @@ class _PoExApp2State extends State<PoExApp2> {
   String reasonValue = '';
   String _selectionAction = '';
   static const _selectionActions = [
-    ApprovalActionMeta(label: 'Send To Draft (ALL)', icon: Icons.edit_note_outlined, color: Color(0xFFFF9800)),
+    ApprovalActionMeta(
+        label: 'Send To Draft (ALL)',
+        icon: Icons.edit_note_outlined,
+        color: Color(0xFFFF9800)),
   ];
 
-  String get _formattedDate =>
-      DateFormat('dd MMM yyyy').format(DateTime.parse(widget.tanggal));
+  String get _formattedDate {
+    final date = DateTime.tryParse(widget.tanggal?.toString() ?? '');
+    return date == null ? '-' : DateFormat('dd MMM yyyy').format(date);
+  }
 
   void _onSelectionAction(String label) {
     setState(() {
@@ -84,38 +87,73 @@ class _PoExApp2State extends State<PoExApp2> {
       if (label == 'Send To Draft (ALL)') valueButton = '-9';
     });
   }
+
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
+    final item = e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{};
+    final budget = item['budget_obj'] is Map
+        ? Map<String, dynamic>.from(item['budget_obj'])
+        : <String, dynamic>{};
+    final data = <String, dynamic>{...budget, ...item};
+    final qty = approvalToDouble(data['qty']);
+    final price = approvalToDouble(data['harga']);
+    final amount = approvalToDouble(data['amount']);
+    final taxAmount = approvalToDouble(data['taxAmount']);
+    final disc = approvalToDouble(data['disc']);
+
     return [
-      ApprovalInfoField('SPPBJ No', (e['sppbjno'] ?? '').toString()),
-      ApprovalInfoField('Item COA', (e['itemcoa'] ?? '').toString()),
-      ApprovalInfoField('Item Name', (e['itemname'] ?? '').toString()),
-      ApprovalInfoField('Remarks', (e['ket'] ?? '').toString()),
-      ApprovalInfoField('Unit', (e['unit'].toString())),
-      ApprovalInfoField('QTY', (e['qty'].toString())),
-      ApprovalInfoField('Price', (ApprovalTheme.currencyFmt.format(double.parse(e['harga']))).toString()),
-      ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(double.parse(e['amount']))).toString()),
-      ApprovalInfoField('Disc', ('${double.parse(e['disc']) / 100}%').toString()),
-      ApprovalInfoField('Tax', (ApprovalTheme.currencyFmt.format(double.parse( e['taxAmount'].toString())))),
-      ApprovalInfoField('Total', (ApprovalTheme.currencyFmt.format(double.parse(e['qty']) * double.parse(e['harga']) + double.parse( e['taxAmount'].toString())))),
-      ApprovalInfoField('Budget Avail', (ApprovalTheme.currencyFmt.format(approvalBudgetAvailable(e)))),
-      ApprovalInfoField('Project', (e['projectname'] ?? e['projectid'] ?? '').toString()),
+      ApprovalInfoField('SPPBJ No', (data['sppbjno'] ?? '').toString()),
+      ApprovalInfoField(
+          'Item COA', (data['itemcoa'] ?? data['coa'] ?? '').toString()),
+      ApprovalInfoField(
+          'Item Name', (data['itemname'] ?? data['coaket'] ?? '').toString()),
+      ApprovalInfoField('Remarks', (data['ket'] ?? '').toString()),
+      ApprovalInfoField('Unit', (data['unit'] ?? '').toString()),
+      ApprovalInfoField('QTY', (data['qty'] ?? '').toString()),
+      ApprovalInfoField('Price', ApprovalTheme.currencyFmt.format(price)),
+      ApprovalInfoField('Amount', ApprovalTheme.currencyFmt.format(amount)),
+      ApprovalInfoField('Disc', '${disc / 100}%'),
+      ApprovalInfoField('Tax', ApprovalTheme.currencyFmt.format(taxAmount)),
+      ApprovalInfoField(
+          'Total', ApprovalTheme.currencyFmt.format(qty * price + taxAmount)),
+      ApprovalInfoField('Budget Avail',
+          ApprovalTheme.currencyFmt.format(approvalBudgetAvailable(data))),
+      ApprovalInfoField('Project',
+          (data['projectname'] ?? data['projectid'] ?? '').toString()),
     ];
   }
+
+  List<dynamic> _extractDetails(dynamic responseData) {
+    dynamic data = responseData is Map ? responseData['data'] : null;
+    if (data is List) {
+      if (data.isEmpty) return <dynamic>[];
+      data = data.firstWhere(
+        (item) => item is Map && item['seckey'] == widget.seckey,
+        orElse: () => data.first,
+      );
+    }
+    if (data is! Map) return <dynamic>[];
+
+    final details = data['details'] ?? data['detailList'];
+    return details is List ? details : <dynamic>[];
+  }
+
   Widget _buildBody() {
     return FutureBuilder(
       future: dataFuture,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text('Error Loading Data', style: TextStyle(color: Colors.grey.shade500)));
+          return Center(
+              child: Text('Error Loading Data',
+                  style: TextStyle(color: Colors.grey.shade500)));
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator(color: ApprovalTheme.primary));
+          return Center(
+              child: CircularProgressIndicator(color: ApprovalTheme.primary));
         }
-                return ApprovalDetailItemsColumn(
+        return ApprovalDetailItemsColumn(
           count: dataaa.length,
           selectable: true,
-          isRowSelected: (i) =>
-              selectedDetails.contains(dataaa[i]['urutan']),
+          isRowSelected: (i) => selectedDetails.contains(dataaa[i]['urutan']),
           onRowSelectionChanged: (i, v) {
             setState(() {
               final id = dataaa[i]['urutan'];
@@ -143,7 +181,8 @@ class _PoExApp2State extends State<PoExApp2> {
   @override
   Widget build(BuildContext context) {
     final hasSelection = selectedGak;
-    final displayAction = _selectionAction.isNotEmpty ? _selectionAction : 'Approve All';
+    final displayAction =
+        _selectionAction.isNotEmpty ? _selectionAction : 'Approve All';
     return WillPopScope(
       onWillPop: () async {
         final shouldPop = await showDialog<bool>(
@@ -152,8 +191,12 @@ class _PoExApp2State extends State<PoExApp2> {
             title: const Text('Are You sure?'),
             content: const Text('Do you want to exit V2RP Mobile?'),
             actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('No')),
-              TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Yes')),
+              TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('No')),
+              TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Yes')),
             ],
           ),
         );
@@ -177,26 +220,41 @@ class _PoExApp2State extends State<PoExApp2> {
             ),
           ],
         ),
-        actionSection: hasSelection ? ApprovalActionGrid(
-          actions: _selectionActions, selectedLabel: _selectionAction, onSelected: _onSelectionAction,
-        ) : null,
+        actionSection: hasSelection
+            ? ApprovalActionGrid(
+                actions: _selectionActions,
+                selectedLabel: _selectionAction,
+                onSelected: _onSelectionAction,
+              )
+            : null,
         body: _buildBody(),
         bottomBar: ApprovalDetailBottomBar(
-          totalPrice: totalPrice, itemCount: dataaa.length,
+          totalPrice: totalPrice,
+          itemCount: dataaa.length,
           selectedAction: hasSelection ? displayAction : null,
-          actionColor: hasSelection ? (_selectionAction.isNotEmpty
-              ? ApprovalActions.colorFor(_selectionAction, _selectionActions) : ApprovalTheme.primary) : null,
+          actionColor: hasSelection
+              ? (_selectionAction.isNotEmpty
+                  ? ApprovalActions.colorFor(
+                      _selectionAction, _selectionActions)
+                  : ApprovalTheme.primary)
+              : null,
           submitLabel: _selectionAction.isNotEmpty ? 'Submit' : 'Approve All',
           idleHint: 'Select items to continue',
-          onSubmit: hasSelection ? () {
-            if (_selectionAction.contains('Draft') || _selectionAction.contains('Reject')) reason();
-            else { setState(() => valueButton = '1'); submitData(); }
-          } : null,
+          onSubmit: hasSelection
+              ? () {
+                  if (_selectionAction.contains('Draft') ||
+                      _selectionAction.contains('Reject'))
+                    reason();
+                  else {
+                    setState(() => valueButton = '1');
+                    submitData();
+                  }
+                }
+              : null,
         ),
       ),
     );
   }
-
 
   Future<dynamic> getDataa() async {
     HttpOverrides.global = MyHttpOverrides();
@@ -208,28 +266,15 @@ class _PoExApp2State extends State<PoExApp2> {
     var monggo = MsgHeader.monggo;
 
     try {
-      var getData = await http.get(
-        // Uri.http('156.67.217.113',
-        //     '/api/v1/mobile/approval/exeption/poscm/' + widget.seckey),
-        Uri.https('v2rp.net',
-            '/api/v1/mobile/approval/exeption/pononscm/' + widget.seckey),
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'kulonuwun': finalKulonuwun ?? kulonuwun,
-          'monggo': finalMonggo ?? monggo,
-        },
-      );
-      final caConfirmData = json.decode(getData.body);
-      final _data = caConfirmData['data'];
-      if (_data is Map && _data['header'] is Map) {
-      }
-      print("response " + caConfirmData.toString());
-      dataaa = caConfirmData['data']['details'];
-      print("dataaa " + dataaa.toString());
-      if (dataaa.isEmpty) {
-        var getData = await http.get(
+      final endpointTypes = widget.tipe?.toString() == '1'
+          ? <String>['pononscm', 'poscm']
+          : <String>['poscm', 'pononscm'];
+
+      dataaa = <dynamic>[];
+      for (final endpointType in endpointTypes) {
+        final getData = await http.get(
           Uri.https('v2rp.net',
-              '/api/v1/mobile/approval/exeption/poscm/' + widget.seckey),
+              '/api/v1/mobile/approval/exeption/$endpointType/${widget.seckey}'),
           headers: {
             'Content-Type': 'application/json; charset=utf-8',
             'kulonuwun': finalKulonuwun ?? kulonuwun,
@@ -238,10 +283,14 @@ class _PoExApp2State extends State<PoExApp2> {
         );
         final caConfirmData = json.decode(getData.body);
         print("response " + caConfirmData.toString());
-        dataaa = caConfirmData['data']['details'];
+        dataaa = _extractDetails(caConfirmData);
         print("dataaa " + dataaa.toString());
+        if (dataaa.isNotEmpty) break;
       }
       totalPrice = approvalSumField(dataaa, 'amount');
+      if (totalPrice == 0) {
+        totalPrice = approvalToDouble(widget.poamount);
+      }
       // print(dTax);
       if (mounted) setState(() {});
       return dataaa;
