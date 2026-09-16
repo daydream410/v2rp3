@@ -86,7 +86,7 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
         setState(() {
           for (final role in _roles) {
             final seckey = role['seckey']?.toString() ?? '';
-            final summary = cached[seckey];
+            final summary = cached[approvalPendingRoleCacheKey(role)];
             if (summary != null) _pendingBySeckey[seckey] = summary;
           }
           _isLoadingRoles = false;
@@ -168,6 +168,10 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
       if (MsgHeader.roleSuccess == true) {
         await prefs.setString('kulonuwun', MsgHeader.kulonuwun ?? '');
         await prefs.setString('monggo', MsgHeader.monggo ?? '');
+        await prefs.setString(
+          'selected_pending_cache_key',
+          approvalPendingRoleCacheKey(role),
+        );
 
         // Prefetch pending approvals for the newly selected company.
         await approvalReloadAfterCompanyChange();

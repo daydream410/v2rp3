@@ -36,10 +36,10 @@ class _SettingScreenState extends State<SettingScreen> {
   List<Map<String, dynamic>> _roles = [];
   final Map<String, ApprovalPendingSummary> _pendingBySeckey = {};
   bool _isLoadingRoleBadges = false;
-  bool _showRoleBadgeLoaders = true;
   bool _roleBadgeProbeStarted = false;
   bool _isCompanyDialogOpen = false;
   StateSetter? _activeCompanyModalSetState;
+  int _companyDialogGeneration = 0;
 
   @override
   void initState() {
@@ -605,7 +605,7 @@ class _SettingScreenState extends State<SettingScreen> {
           ),
           const Spacer(),
           Text(
-            '1.4.1',
+            '1.4.2',
             style: TextStyle(
               fontSize: isTablet ? 15 : 14,
               fontWeight: FontWeight.bold,
@@ -850,6 +850,8 @@ class _SettingScreenState extends State<SettingScreen> {
     if (_roles.isEmpty || _isLoadingRoleBadges) return;
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+
       // Prefer already-loaded summary for the active company session.
       if (Get.isRegistered<ApprovalNotifController>()) {
         final controller = Get.find<ApprovalNotifController>();
@@ -865,6 +867,12 @@ class _SettingScreenState extends State<SettingScreen> {
               final seckey = role['seckey']?.toString() ?? '';
               if (seckey.isNotEmpty) {
                 _pendingBySeckey[seckey] = current;
+                final cacheKey = approvalPendingRoleCacheKey(role);
+                await prefs.setString(
+                  'selected_pending_cache_key',
+                  cacheKey,
+                );
+                await approvalCachePendingSummary(cacheKey, current);
                 if (_isCompanyDialogOpen) {
                   _activeCompanyModalSetState?.call(() {});
                 }
@@ -887,7 +895,6 @@ class _SettingScreenState extends State<SettingScreen> {
       }
       if (mounted) setState(() {});
 
-      final prefs = await SharedPreferences.getInstance();
       String? fcmToken = prefs.getString('fcm_token');
       if (fcmToken == null || fcmToken.isEmpty) {
         fcmToken = await getAndSaveFcmToken();
@@ -916,19 +923,23 @@ class _SettingScreenState extends State<SettingScreen> {
   }
 
   Future<void> _showChangeCompanyDialog() async {
+    final dialogGeneration = ++_companyDialogGeneration;
     _roleBadgeProbeStarted = false;
     await _fetchRoles();
-    if (!mounted || _roles.isEmpty) return;
+    if (!mounted ||
+        dialogGeneration != _companyDialogGeneration ||
+        _roles.isEmpty) {
+      return;
+    }
 
     final cached = await approvalLoadPendingSummaryCache();
-    if (!mounted) return;
+    if (!mounted || dialogGeneration != _companyDialogGeneration) return;
     setState(() {
       for (final role in _roles) {
         final seckey = role['seckey']?.toString() ?? '';
-        final summary = cached[seckey];
+        final summary = cached[approvalPendingRoleCacheKey(role)];
         if (summary != null) _pendingBySeckey[seckey] = summary;
       }
-      _showRoleBadgeLoaders = !_isLoadingRoleBadges;
     });
 
     _isCompanyDialogOpen = true;
@@ -939,7 +950,9 @@ class _SettingScreenState extends State<SettingScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            _activeCompanyModalSetState = setModalState;
+            if (dialogGeneration == _companyDialogGeneration) {
+              _activeCompanyModalSetState = setModalState;
+            }
             if (!_roleBadgeProbeStarted && _roles.isNotEmpty) {
               _roleBadgeProbeStarted = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1022,8 +1035,7 @@ class _SettingScreenState extends State<SettingScreen> {
                             final seckey = role['seckey']?.toString() ?? '';
                             final pending = _pendingBySeckey[seckey] ??
                                 ApprovalPendingSummary.empty;
-                            final showBadgeLoader = _showRoleBadgeLoaders &&
-                                _isLoadingRoleBadges &&
+              final showBadgeLoader = _isLoadingRoleBadges &&
                                 !_pendingBySeckey.containsKey(seckey);
                             final currentRole = _profileData?['role'] ?? '';
                             final currentCompany =
@@ -1220,8 +1232,10 @@ class _SettingScreenState extends State<SettingScreen> {
         );
       },
     );
-    _isCompanyDialogOpen = false;
-    _activeCompanyModalSetState = null;
+    if (dialogGeneration == _companyDialogGeneration) {
+      _isCompanyDialogOpen = false;
+      _activeCompanyModalSetState = null;
+    }
   }
 
   Future<void> _chooseRole(Map<String, dynamic> role) async {
@@ -1262,6 +1276,10 @@ class _SettingScreenState extends State<SettingScreen> {
           (MsgHeader.monggo ?? '').toString().isNotEmpty) {
         await prefs.setString('kulonuwun', MsgHeader.kulonuwun ?? '');
         await prefs.setString('monggo', MsgHeader.monggo ?? '');
+        await prefs.setString(
+          'selected_pending_cache_key',
+          approvalPendingRoleCacheKey(role),
+        );
 
         // Refresh profile + pending approvals for the new company session.
         await fetchProfile();

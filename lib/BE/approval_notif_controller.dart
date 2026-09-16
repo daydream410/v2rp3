@@ -288,8 +288,18 @@ class ApprovalPendingSummary {
   }
 }
 
-const _pendingSummaryCacheKey = 'approval_pending_summary_cache_v1';
+const _pendingSummaryCacheKey = 'approval_pending_summary_cache_v2';
+const _legacyPendingSummaryCacheKey = 'approval_pending_summary_cache_v1';
 Future<void> _pendingSummaryCacheWrite = Future<void>.value();
+
+String approvalPendingRoleCacheKey(Map<dynamic, dynamic> role) {
+  final company = role['company']?.toString().trim().toLowerCase() ?? '';
+  final roleName = role['role']?.toString().trim().toLowerCase() ?? '';
+  if (company.isNotEmpty || roleName.isNotEmpty) {
+    return 'company-role:$company::$roleName';
+  }
+  return role['seckey']?.toString() ?? '';
+}
 
 Map<String, dynamic> _pendingSummaryToJson(ApprovalPendingSummary summary) {
   return {
@@ -325,6 +335,9 @@ Future<Map<String, ApprovalPendingSummary>>
     approvalLoadPendingSummaryCache() async {
   await _pendingSummaryCacheWrite;
   final prefs = await SharedPreferences.getInstance();
+  if (prefs.containsKey(_legacyPendingSummaryCacheKey)) {
+    await prefs.remove(_legacyPendingSummaryCacheKey);
+  }
   final raw = prefs.getString(_pendingSummaryCacheKey);
   if (raw == null || raw.isEmpty) return {};
 
@@ -503,7 +516,9 @@ class ApprovalNotifController extends GetxController {
       _fetchedAt = DateTime.now();
       sessionExpired.value = false;
       final selectedSeckey =
-          sharedPreferences.getString('selected_seckey') ?? '';
+          sharedPreferences.getString('selected_pending_cache_key') ??
+              sharedPreferences.getString('selected_seckey') ??
+              '';
       await approvalCachePendingSummary(
         selectedSeckey,
         ApprovalPendingSummary.fromTotals(totals.value),
@@ -604,6 +619,7 @@ Future<Map<String, ApprovalPendingSummary>> approvalProbePendingCountsForRoles(
   final originalHeaderM = MsgHeader.monggo;
   final platform = Platform.isAndroid ? 'android' : 'ios';
   final summaries = <String, ApprovalPendingSummary>{};
+  final cacheUpdates = <String, ApprovalPendingSummary>{};
 
   print(
       'ℹ️ [FCM:PROBE] Probing ${roles.length} roles (token present: ${fcmToken.isNotEmpty})');
@@ -638,13 +654,15 @@ Future<Map<String, ApprovalPendingSummary>> approvalProbePendingCountsForRoles(
               );
         summaries[seckey] = summary;
         onSummary?.call(seckey, summary);
-        await approvalCachePendingSummary(seckey, summary);
+        final cacheKey = approvalPendingRoleCacheKey(role);
+        cacheUpdates[cacheKey] = summary;
+        await approvalCachePendingSummary(cacheKey, summary);
       } catch (_) {
         summaries[seckey] = ApprovalPendingSummary.empty;
         onSummary?.call(seckey, ApprovalPendingSummary.empty);
       }
     }
-    await approvalCachePendingSummaries(summaries);
+    await approvalCachePendingSummaries(cacheUpdates);
   } finally {
     final currentKulonuwun = prefs.getString('kulonuwun');
     final sessionChangedDuringProbe = currentKulonuwun != null &&

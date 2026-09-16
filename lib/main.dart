@@ -282,6 +282,10 @@ Future<bool> _activateNotificationCompany({
       return false;
     }
 
+    await prefs.setString(
+      'selected_pending_cache_key',
+      approvalPendingRoleCacheKey(targetRole),
+    );
     await approvalReloadAfterCompanyChange();
     print('Notification company activated: $targetCompany');
     return true;
