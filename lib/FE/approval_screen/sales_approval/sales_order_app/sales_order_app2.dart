@@ -1,12 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:v2rp3/utils/hex_color.dart';
-import 'package:data_table_2/data_table_2.dart';
 import 'package:intl/intl.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -100,7 +97,28 @@ class _SalesOrderApproval2State extends State<SalesOrderApproval2> {
       else if (status == "Send To Draft") { updstatus = "-9"; isVisible = true; }
     });
   }
+
+  double _lineNetAmount(Map<dynamic, dynamic> item) {
+    return approvalToDouble(item['amount']) - approvalLineTaxAmount(item);
+  }
+
+  double _lineTotalAmount(Map<dynamic, dynamic> item) {
+    return _lineNetAmount(item) * 11 / 12;
+  }
+
+  double _lineAmountAfterTax(Map<dynamic, dynamic> item) {
+    return approvalToDouble(item['amount']);
+  }
+
   List<ApprovalInfoField> _itemDetailFields(dynamic e) {
+    final item = e as Map<dynamic, dynamic>;
+    final amount =
+        approvalToDouble(item['harga']) * approvalToDouble(item['qty']);
+    final netAmount = _lineNetAmount(item);
+    final totalAmount = _lineTotalAmount(item);
+    final taxAmount = approvalLineTaxAmount(item);
+    final amountAfterTax = _lineAmountAfterTax(item);
+
     return [
       ApprovalInfoField('Type', (e['tipe'] == 0 ? 'Item' : 'Non Item').toString()),
       ApprovalInfoField('Project Name', (e['projectid'] ?? '').toString()),
@@ -109,9 +127,12 @@ class _SalesOrderApproval2State extends State<SalesOrderApproval2> {
       ApprovalInfoField('Unit', (e['unit'] ?? '').toString()),
       ApprovalInfoField('QTY', (e['qty'].toString())),
       ApprovalInfoField('Price/ Unit', (ApprovalTheme.currencyFmt.format(e['harga'])).toString()),
-      ApprovalInfoField('Disc', ('${e['disc']}%').toString()),
-      ApprovalInfoField('Tax Amt', (ApprovalTheme.currencyFmt.format(approvalLineTaxAmount(e))).toString()),
-      ApprovalInfoField('Amount', (ApprovalTheme.currencyFmt.format(approvalSalesLineNet(e))).toString()),
+      ApprovalInfoField('Amount', ApprovalTheme.currencyFmt.format(amount)),
+      ApprovalInfoField('Discount', ('${e['disc']}%').toString()),
+      ApprovalInfoField('Net Amount', ApprovalTheme.currencyFmt.format(netAmount)),
+      ApprovalInfoField('Total Amount', ApprovalTheme.currencyFmt.format(totalAmount)),
+      ApprovalInfoField('Tax Amount', ApprovalTheme.currencyFmt.format(taxAmount)),
+      ApprovalInfoField('Amount After Tax', ApprovalTheme.currencyFmt.format(amountAfterTax)),
       ApprovalInfoField('Amt in IDR', (ApprovalTheme.currencyFmt.format(e['amtidr'])).toString()),
     ];
   }
@@ -205,30 +226,13 @@ class _SalesOrderApproval2State extends State<SalesOrderApproval2> {
       final data = caConfirmData['data'];
       dataaa = data['detail'];
 
-      final header = data['header'];
-      final grossTotal = approvalSumLineAmount(dataaa);
-
-      // Prefer header total from API (same source as web); avoid guessing discounts.
-      double? headerTotal;
-      if (header is Map) {
-        for (final key in ['amount', 'amtidr', 'total', 'grandtotal', 'netamount']) {
-          final value = approvalToDouble(header[key]);
-          if (value > 0) {
-            headerTotal = value;
-            break;
-          }
+      totalPrice = 0;
+      for (final item in dataaa) {
+        if (item is Map) {
+          totalPrice += _lineTotalAmount(item);
         }
       }
 
-      if (headerTotal != null) {
-        totalPrice = headerTotal;
-      } else {
-        totalPrice = grossTotal;
-      }
-
-      print('SO header: $header');
-      print('SO grossTotal: $grossTotal');
-      print('SO headerTotal: $headerTotal');
       print('SO totalPrice: $totalPrice');
       print('SO detail: $dataaa');
       if (mounted) setState(() {});
