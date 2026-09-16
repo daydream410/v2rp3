@@ -24,6 +24,7 @@ class ChooseRoleScreen extends StatefulWidget {
 
 class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
   bool _isLoading = false;
+  String? _selectedCompanyName;
   bool _isLoadingRoles = true;
   bool _isLoadingBadges = false;
   List<Map<String, dynamic>> _roles = [];
@@ -119,7 +120,11 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
   Future<void> _chooseRole(Map<String, dynamic> role) async {
     if (_isLoading) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _selectedCompanyName =
+          role['companyname']?.toString() ?? role['company']?.toString();
+    });
 
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -187,55 +192,132 @@ class _ChooseRoleScreenState extends State<ChooseRoleScreen> {
       print('Choose role error: $e');
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _selectedCompanyName = null;
+        });
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AuthHeroShell(
-      step: AuthStep.company,
-      title: 'Select Your Port',
-      onBack: () => Get.offAll(const OtpVerificationScreen()),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const AuthHeroSubtitle(
-            text: 'Pick your role and company to enter',
-          ),
-          const SizedBox(height: 20),
-          if (_isLoadingRoles)
-            const AuthRoleLoadingSkeleton(heroStyle: true)
-          else if (_roles.isEmpty)
-            AuthEmptyState(
-              message: 'No company roles found. Please sign in again.',
-              onRetry: _loadRoles,
-              heroStyle: true,
-            )
-          else ...[
-            AuthInfoBanner(
-              message:
-                  '${_roles.length} role${_roles.length == 1 ? '' : 's'} available',
-              icon: Icons.directions_boat_filled_outlined,
-              heroStyle: true,
-            ),
-            const SizedBox(height: 10),
-            for (final role in _roles)
-              AuthRoleCard(
-                role: role,
-                isLoading: _isLoading,
-                heroStyle: true,
-                pending: _pendingBySeckey[role['seckey']?.toString()] ??
-                    ApprovalPendingSummary.empty,
-                isLoadingBadge: _isLoadingBadges &&
-                    !_pendingBySeckey.containsKey(role['seckey']?.toString()),
-                onTap: () => _chooseRole(role),
+    return Stack(
+      children: [
+        AuthHeroShell(
+          step: AuthStep.company,
+          title: 'Select Your Port',
+          onBack: () => Get.offAll(const OtpVerificationScreen()),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const AuthHeroSubtitle(
+                text: 'Pick your role and company to enter',
               ),
-          ],
+              const SizedBox(height: 20),
+              if (_isLoadingRoles)
+                const AuthRoleLoadingSkeleton(heroStyle: true)
+              else if (_roles.isEmpty)
+                AuthEmptyState(
+                  message: 'No company roles found. Please sign in again.',
+                  onRetry: _loadRoles,
+                  heroStyle: true,
+                )
+              else ...[
+                AuthInfoBanner(
+                  message:
+                      '${_roles.length} role${_roles.length == 1 ? '' : 's'} available',
+                  icon: Icons.directions_boat_filled_outlined,
+                  heroStyle: true,
+                ),
+                const SizedBox(height: 10),
+                for (final role in _roles)
+                  AuthRoleCard(
+                    role: role,
+                    isLoading: _isLoading,
+                    heroStyle: true,
+                    pending: _pendingBySeckey[role['seckey']?.toString()] ??
+                        ApprovalPendingSummary.empty,
+                    isLoadingBadge: _isLoadingBadges &&
+                        !_pendingBySeckey
+                            .containsKey(role['seckey']?.toString()),
+                    onTap: () => _chooseRole(role),
+                  ),
+              ],
+            ],
+          ),
+        ),
+        if (_isLoading) ...[
+          const Positioned.fill(
+            child: ModalBarrier(
+              dismissible: false,
+              color: Color(0x99071325),
+            ),
+          ),
+          Positioned.fill(
+            child: Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 300),
+                margin: const EdgeInsets.symmetric(horizontal: 32),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 24,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(
+                      color: HexColor('#F4A62A'),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Preparing your company',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF071325),
+                      ),
+                    ),
+                    if (_selectedCompanyName?.trim().isNotEmpty == true) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        _selectedCompanyName!,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Text(
+                      'Setting up your session and approval data...',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 }
