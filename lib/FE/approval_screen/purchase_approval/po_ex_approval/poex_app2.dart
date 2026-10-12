@@ -2,7 +2,6 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -10,6 +9,7 @@ import 'package:v2rp3/utils/hex_color.dart';
 import 'package:intl/intl.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:v2rp3/BE/notif_type.dart';
 import 'package:v2rp3/FE/approval_screen/purchase_approval/po_ex_approval/poex_app.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
@@ -18,7 +18,6 @@ import 'package:v2rp3/BE/controller.dart';
 import 'package:v2rp3/BE/approval_notif_controller.dart';
 
 import '../../../../BE/reqip.dart';
-import '../../../../BE/resD.dart';
 import '../../../../main.dart';
 
 class PoExApp2 extends StatefulWidget {
@@ -32,7 +31,7 @@ class PoExApp2 extends StatefulWidget {
   final poamount;
   final different;
   final budgetavailable;
-  final tipe;
+  final String type;
 
   PoExApp2({
     Key? key,
@@ -46,7 +45,7 @@ class PoExApp2 extends StatefulWidget {
     required this.poamount,
     required this.different,
     required this.budgetavailable,
-    required this.tipe,
+    required this.type,
   }) : super(key: key);
 
   @override
@@ -54,20 +53,13 @@ class PoExApp2 extends StatefulWidget {
 }
 
 class _PoExApp2State extends State<PoExApp2> {
-  static late List dataaa = <CaConfirmData>[];
+  List dataaa = [];
   late Future dataFuture;
-  @override
-  void initState() {
-    super.initState();
-    dataFuture = getDataa();
-  }
-
   static TextControllers textControllers = Get.put(TextControllers());
   List selectedDetails = [];
   bool selectedGak = false;
   double totalPrice = 0;
   var valueButton;
-  String reasonValue = '';
   String _selectionAction = '';
   static const _selectionActions = [
     ApprovalActionMeta(
@@ -76,9 +68,17 @@ class _PoExApp2State extends State<PoExApp2> {
         color: Color(0xFFFF9800)),
   ];
 
+  String get _apiSegment => NotifType.poExceptionApiSegment(widget.type);
+
   String get _formattedDate {
     final date = DateTime.tryParse(widget.tanggal?.toString() ?? '');
     return date == null ? '-' : DateFormat('dd MMM yyyy').format(date);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    dataFuture = getDataa();
   }
 
   void _onSelectionAction(String label) {
@@ -135,6 +135,20 @@ class _PoExApp2State extends State<PoExApp2> {
 
     final details = data['details'] ?? data['detailList'];
     return details is List ? details : <dynamic>[];
+  }
+
+  Future<Map<String, String>> _authHeaders({bool forJsonBody = false}) async {
+    final SharedPreferences sharedPreferences =
+        await SharedPreferences.getInstance();
+    final finalKulonuwun = sharedPreferences.getString('kulonuwun');
+    final finalMonggo = sharedPreferences.getString('monggo');
+    return {
+      'Content-Type': forJsonBody
+          ? 'application/json'
+          : 'application/json; charset=utf-8',
+      'kulonuwun': finalKulonuwun ?? MsgHeader.kulonuwun,
+      'monggo': finalMonggo ?? MsgHeader.monggo,
+    };
   }
 
   Widget _buildBody() {
@@ -205,11 +219,13 @@ class _PoExApp2State extends State<PoExApp2> {
       },
       child: ApprovalDetailScaffold(
         docNo: widget.pono ?? '',
-        subtitle: _formattedDate,
+        subtitle:
+            '${NotifType.poExceptionLabel(widget.type)} · $_formattedDate',
         onBack: () => Get.to(() => PoExApp()),
         infoPanel: ApprovalInfoPanel(
           collapsedSubtitle: widget.requestor ?? '-',
           fields: [
+            ApprovalInfoField('Type', NotifType.poExceptionLabel(widget.type)),
             ApprovalInfoField('Project', widget.projectid ?? '-'),
             ApprovalInfoField('Request By', widget.requestor ?? '-'),
             ApprovalInfoField(
@@ -243,9 +259,9 @@ class _PoExApp2State extends State<PoExApp2> {
           onSubmit: hasSelection
               ? () {
                   if (_selectionAction.contains('Draft') ||
-                      _selectionAction.contains('Reject'))
+                      _selectionAction.contains('Reject')) {
                     reason();
-                  else {
+                  } else {
                     setState(() => valueButton = '1');
                     submitData();
                   }
@@ -258,40 +274,22 @@ class _PoExApp2State extends State<PoExApp2> {
 
   Future<dynamic> getDataa() async {
     HttpOverrides.global = MyHttpOverrides();
-    final SharedPreferences sharedPreferences =
-        await SharedPreferences.getInstance();
-    var finalKulonuwun = sharedPreferences.getString('kulonuwun');
-    var finalMonggo = sharedPreferences.getString('monggo');
-    var kulonuwun = MsgHeader.kulonuwun;
-    var monggo = MsgHeader.monggo;
+    final headers = await _authHeaders();
 
     try {
-      final endpointTypes = widget.tipe?.toString() == '1'
-          ? <String>['pononscm', 'poscm']
-          : <String>['poscm', 'pononscm'];
-
-      dataaa = <dynamic>[];
-      for (final endpointType in endpointTypes) {
-        final getData = await http.get(
-          Uri.https('v2rp.net',
-              '/api/v1/mobile/approval/exeption/$endpointType/${widget.seckey}'),
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-            'kulonuwun': finalKulonuwun ?? kulonuwun,
-            'monggo': finalMonggo ?? monggo,
-          },
-        );
-        final caConfirmData = json.decode(getData.body);
-        print("response " + caConfirmData.toString());
-        dataaa = _extractDetails(caConfirmData);
-        print("dataaa " + dataaa.toString());
-        if (dataaa.isNotEmpty) break;
-      }
+      final getData = await http.get(
+        Uri.https(
+          'v2rp.net',
+          '/api/v1/mobile/approval/exeption/$_apiSegment/${widget.seckey}',
+        ),
+        headers: headers,
+      );
+      final responseData = json.decode(getData.body);
+      dataaa = _extractDetails(responseData);
       totalPrice = approvalSumField(dataaa, 'amount');
       if (totalPrice == 0) {
         totalPrice = approvalToDouble(widget.poamount);
       }
-      // print(dTax);
       if (mounted) setState(() {});
       return dataaa;
     } catch (e) {
@@ -299,22 +297,16 @@ class _PoExApp2State extends State<PoExApp2> {
     }
   }
 
-//----------------------------------------------------------------
   Future<void> submitData() async {
     HttpOverrides.global = MyHttpOverrides();
-    final SharedPreferences sharedPreferences =
-        await SharedPreferences.getInstance();
-    var finalKulonuwun = sharedPreferences.getString('kulonuwun');
-    var finalMonggo = sharedPreferences.getString('monggo');
-    var kulonuwun = MsgHeader.kulonuwun;
-    var monggo = MsgHeader.monggo;
+    final headers = await _authHeaders(forJsonBody: true);
     var status;
     var message;
     var messageError;
 
-    var body = json.encode({
-      "urutan": selectedDetails,
-      "reason": textControllers.poexAppControllerReason.value.text,
+    final body = json.encode({
+      'urutan': selectedDetails,
+      'reason': textControllers.poexAppControllerReason.value.text,
     });
 
     QuickAlert.show(
@@ -326,55 +318,22 @@ class _PoExApp2State extends State<PoExApp2> {
       disableBackBtn: true,
     );
     try {
-      var sendData = await http.put(
+      final sendData = await http.put(
         Uri.https(
           'v2rp.net',
-          '/api/v1/mobile/approval/exeption/poscm/' +
-              widget.seckey +
-              '/' +
-              valueButton,
+          '/api/v1/mobile/approval/exeption/$_apiSegment/${widget.seckey}/$valueButton',
         ),
         body: body,
-        headers: {
-          'Content-type': 'application/json',
-          'kulonuwun': finalKulonuwun ?? kulonuwun,
-          'monggo': finalMonggo ?? monggo,
-        },
+        headers: headers,
       );
-      print("selected = " +
-          selectedDetails.toString() +
-          selectedDetails.runtimeType.toString());
       final response = json.decode(sendData.body);
       print(response.toString());
       setState(() {
         status = response['success'];
         messageError = response['message'];
-        message = response['data']['message'] ?? '';
+        message = response['data']?['message'] ?? '';
       });
-      if (status == false) {
-        var sendData = await http.put(
-          Uri.https(
-            'v2rp.net',
-            '/api/v1/mobile/approval/exeption/pononscm/' +
-                widget.seckey +
-                '/' +
-                valueButton,
-          ),
-          body: body,
-          headers: {
-            'Content-type': 'application/json',
-            'kulonuwun': finalKulonuwun ?? kulonuwun,
-            'monggo': finalMonggo ?? monggo,
-          },
-        );
-        final response = json.decode(sendData.body);
-        print(response.toString());
-        setState(() {
-          status = response['success'];
-          messageError = response['message'];
-          message = response['data']['message'] ?? '';
-        });
-      }
+
       if (status == true) {
         approvalRefreshMenuCounts();
         QuickAlert.show(
@@ -383,7 +342,6 @@ class _PoExApp2State extends State<PoExApp2> {
             disableBackBtn: true,
             text: 'Success $message Data!',
             barrierDismissible: false,
-            // confirmBtnText: 'OK',
             onConfirmBtnTap: () async {
               Get.to(() => PoExApp());
             },
@@ -393,15 +351,12 @@ class _PoExApp2State extends State<PoExApp2> {
               Get.to(const Navbar());
             });
       } else {
-        // setState(() {
-        //   message = response['data']['message'];
-        // });
         await Future.delayed(const Duration(milliseconds: 1000));
         await QuickAlert.show(
           context: context,
           type: QuickAlertType.error,
           disableBackBtn: true,
-          title: 'Failed! ' + widget.pono,
+          title: 'Failed! ${widget.pono}',
           text: '$message',
           barrierDismissible: false,
           onConfirmBtnTap: () async {
@@ -415,7 +370,7 @@ class _PoExApp2State extends State<PoExApp2> {
         context: context,
         type: QuickAlertType.warning,
         disableBackBtn: true,
-        title: 'Error! ' + widget.pono,
+        title: 'Error! ${widget.pono}',
         text: '$messageError',
         onConfirmBtnTap: () async {
           Get.to(() => PoExApp());
@@ -429,7 +384,7 @@ class _PoExApp2State extends State<PoExApp2> {
       context: context,
       type: QuickAlertType.custom,
       confirmBtnText: 'S U B M I T',
-      confirmBtnColor: HexColor("#ffc947"),
+      confirmBtnColor: HexColor('#ffc947'),
       widget: TextFormField(
         decoration: const InputDecoration(
           alignLabelWithHint: true,
@@ -443,7 +398,6 @@ class _PoExApp2State extends State<PoExApp2> {
         controller: textControllers.poexAppControllerReason.value,
       ),
       onConfirmBtnTap: () {
-        print(textControllers.poexAppControllerReason.value.text);
         submitData();
       },
     );

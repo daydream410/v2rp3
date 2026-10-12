@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'reqip.dart';
+import 'notif_type.dart';
 import '../main.dart';
 
 /// Pending counts per approval type from `/api/v1/mobile/notif`.
@@ -22,6 +23,8 @@ class ApprovalNotifTotals {
   final int totalKD;
   final int totalLC;
   final int totalLA;
+  final int totalLDA;
+  final int totalLD;
   final int totalMUA;
   final int totalITA;
   final int totalMRA;
@@ -59,6 +62,8 @@ class ApprovalNotifTotals {
     this.totalKD = 0,
     this.totalLC = 0,
     this.totalLA = 0,
+    this.totalLDA = 0,
+    this.totalLD = 0,
     this.totalMUA = 0,
     this.totalITA = 0,
     this.totalMRA = 0,
@@ -153,7 +158,7 @@ class ApprovalNotifTotals {
     final counts = <String, int>{};
     for (final item in items) {
       if (item is! Map) continue;
-      final tipe = item['tipe']?.toString();
+      final tipe = item['tipe']?.toString().trim().toUpperCase();
       if (tipe == null || tipe.isEmpty) continue;
       counts[tipe] = (counts[tipe] ?? 0) + 1;
     }
@@ -161,41 +166,43 @@ class ApprovalNotifTotals {
     int c(String key) => counts[key] ?? 0;
 
     return ApprovalNotifTotals(
-      totalSC: c('SC'),
-      totalSA: c('SA'),
-      totalPA: c('PA'),
-      totalPOE: c('POE'),
-      totalPNE: c('PNE'),
-      totalKC: c('KC'),
-      totalKA: c('KA'),
-      totalKDA: c('KDA'),
-      totalKD: c('KD'),
-      totalLC: c('LC'),
-      totalLA: c('LA'),
-      totalMUA: c('MUA'),
-      totalITA: c('ITA'),
-      totalMRA: c('MRA'),
-      totalGRA: c('GRA'),
-      totalSTA: c('STA'),
-      totalSMA: c('SMA'),
-      totalSAA: c('SAA'),
-      totalSPA: c('SPA'),
-      totalMMU: c('MMU'),
-      totalSTUA: c('STUA'),
-      totalDNA: c('DNA'),
-      totalAPRA: c('APRA'),
-      totalDPA: c('DPA'),
-      totalSOA: c('SOA'),
-      totalAPAA: c('APAA'),
-      totalAA: c('AA'),
-      totalNA: c('NA'),
-      totalARRA: c('ARRA'),
-      totalITSA: c('ITSA'),
-      totalSTSA: c('STSA'),
-      totalPOS: c('POS'),
-      totalPNS: c('PNS'),
-      totalWoApp: c('WOA'),
-      totalWoCompleted: c('WOU'),
+      totalSC: c(NotifType.sc),
+      totalSA: c(NotifType.sa),
+      totalPA: c(NotifType.pa),
+      totalPOE: c(NotifType.poe),
+      totalPNE: c(NotifType.pne),
+      totalKC: c(NotifType.kc),
+      totalKA: c(NotifType.ka),
+      totalKDA: c(NotifType.kda),
+      totalKD: c(NotifType.kd),
+      totalLC: c(NotifType.lc),
+      totalLA: c(NotifType.la),
+      totalLDA: c(NotifType.lda),
+      totalLD: c(NotifType.ld),
+      totalMUA: c(NotifType.mua),
+      totalITA: c(NotifType.ita),
+      totalMRA: c(NotifType.mra),
+      totalGRA: c(NotifType.gra),
+      totalSTA: c(NotifType.sta),
+      totalSMA: c(NotifType.sma),
+      totalSAA: c(NotifType.saa),
+      totalSPA: c(NotifType.spa),
+      totalMMU: c(NotifType.mmu),
+      totalSTUA: c(NotifType.stua),
+      totalDNA: c(NotifType.dna),
+      totalAPRA: c(NotifType.apra),
+      totalDPA: c(NotifType.dpa),
+      totalSOA: c(NotifType.soa),
+      totalAPAA: c(NotifType.apaa),
+      totalAA: c(NotifType.aa),
+      totalNA: c(NotifType.na),
+      totalARRA: c(NotifType.arra),
+      totalITSA: c(NotifType.itsa),
+      totalSTSA: c(NotifType.stsa),
+      totalPOS: c(NotifType.pos),
+      totalPNS: c(NotifType.pns),
+      totalWoApp: c(NotifType.woa),
+      totalWoCompleted: c(NotifType.wou),
     );
   }
 }

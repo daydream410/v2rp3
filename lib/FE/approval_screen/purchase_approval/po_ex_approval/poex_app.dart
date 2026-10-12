@@ -5,13 +5,13 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:v2rp3/BE/notif_type.dart';
 import 'package:v2rp3/FE/shared/approval_ui.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../../../BE/controller.dart';
 import '../../../../../BE/reqip.dart';
-import '../../../../../BE/resD.dart';
 import '../../../../../main.dart';
 import 'package:v2rp3/FE/approval_screen/purchase_approval/po_ex_approval/poex_app2.dart';
 
@@ -24,12 +24,15 @@ class PoExApp extends StatefulWidget {
 
 class _PoExAppState extends State<PoExApp> {
   static TextControllers textControllers = Get.put(TextControllers());
-  static late List dataaa = <CaConfirmData>[];
-  static late List dataaa2 = <CaConfirmData>[];
-  static late List gabung = <CaConfirmData>[];
-  static late List _foundUsers = <CaConfirmData>[];
-  var tipe = '0';
+  List _allItems = [];
+  List _foundUsers = [];
   late Future dataFuture;
+  String _typeFilter = 'ALL'; // ALL | POE | PNE
+
+  static const _listEndpoints = <String, String>{
+    NotifType.poe: '/api/v1/mobile/approval/exeption/poscm/',
+    NotifType.pne: '/api/v1/mobile/approval/exeption/pononscm/',
+  };
 
   @override
   void initState() {
@@ -37,19 +40,90 @@ class _PoExAppState extends State<PoExApp> {
     dataFuture = getDataa();
   }
 
-  void _runFilter(String enteredKeyword) {
-    List results = [];
-    if (enteredKeyword.isEmpty) {
-      results = gabung;
-    } else {
-      results = gabung
-          .where((item) => _headerOf(item)['pono']
-              .toString()
-              .toLowerCase()
-              .contains(enteredKeyword.toLowerCase()))
-          .toList();
-    }
+  String _itemType(dynamic item) {
+    if (item is! Map) return '';
+    final header = _headerOf(item);
+    return (item['type'] ?? header['type'] ?? '').toString().trim().toUpperCase();
+  }
+
+  int _countFor(String type) {
+    if (type == 'ALL') return _allItems.length;
+    return _allItems.where((item) => _itemType(item) == type).length;
+  }
+
+  void _applyFilters([String? enteredKeyword]) {
+    final keyword = (enteredKeyword ??
+            textControllers.poexAppController.value.text)
+        .trim()
+        .toLowerCase();
+
+    var results = _allItems.where((item) {
+      if (_typeFilter != 'ALL' && _itemType(item) != _typeFilter) {
+        return false;
+      }
+      if (keyword.isEmpty) return true;
+      final header = _headerOf(item);
+      return header['pono'].toString().toLowerCase().contains(keyword);
+    }).toList();
+
     setState(() => _foundUsers = results);
+  }
+
+  void _runFilter(String enteredKeyword) => _applyFilters(enteredKeyword);
+
+  void _setTypeFilter(String type) {
+    if (_typeFilter == type) return;
+    _typeFilter = type;
+    _applyFilters();
+  }
+
+  Widget _buildTypeFilter() {
+    Widget chip({
+      required String id,
+      required String label,
+      required int count,
+    }) {
+      final selected = _typeFilter == id;
+      return FilterChip(
+        selected: selected,
+        showCheckmark: false,
+        label: Text(
+          '$label ($count)',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : Colors.grey.shade700,
+          ),
+        ),
+        selectedColor: ApprovalTheme.primary,
+        backgroundColor: Colors.white,
+        side: BorderSide(
+          color: selected ? ApprovalTheme.primary : Colors.grey.shade300,
+        ),
+        onSelected: (_) => _setTypeFilter(id),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          chip(id: 'ALL', label: 'All', count: _countFor('ALL')),
+          const SizedBox(width: 8),
+          chip(
+            id: NotifType.poe,
+            label: 'PO SCM',
+            count: _countFor(NotifType.poe),
+          ),
+          const SizedBox(width: 8),
+          chip(
+            id: NotifType.pne,
+            label: 'PO Non SCM',
+            count: _countFor(NotifType.pne),
+          ),
+        ],
+      ),
+    );
   }
 
   Map<String, dynamic> _headerOf(dynamic item) {
@@ -59,21 +133,37 @@ class _PoExAppState extends State<PoExApp> {
     return Map<String, dynamic>.from(item);
   }
 
-  List<dynamic> _normalizeItems(dynamic rawData, String sourceType) {
+  String _resolveType(Map<String, dynamic> item, String fallbackType) {
+    final fromItem = item['type']?.toString().trim().toUpperCase();
+    if (fromItem == NotifType.poe || fromItem == NotifType.pne) {
+      return fromItem!;
+    }
+    final header = _headerOf(item);
+    final fromHeader = header['type']?.toString().trim().toUpperCase();
+    if (fromHeader == NotifType.poe || fromHeader == NotifType.pne) {
+      return fromHeader!;
+    }
+    return fallbackType;
+  }
+
+  List<dynamic> _normalizeItems(dynamic rawData, String fallbackType) {
     if (rawData is! List) return <dynamic>[];
 
     return rawData.whereType<Map>().map((rawItem) {
       final item = Map<String, dynamic>.from(rawItem);
+      final type = _resolveType(item, fallbackType);
       final header = _headerOf(item);
       header['requestorname'] ??= header['requestor'];
+      header['type'] = type;
       item['header'] = header;
-      item['_tipe'] = sourceType;
+      item['type'] = type;
       return item;
     }).toList();
   }
 
   void _openDetail(dynamic item) {
     final header = _headerOf(item);
+    final type = (item['type'] ?? header['type'] ?? NotifType.poe).toString();
     Get.to(() => PoExApp2(
           seckey: item['seckey'],
           pono: header['pono'],
@@ -85,7 +175,7 @@ class _PoExAppState extends State<PoExApp> {
           poamount: header['poamount'],
           different: header['different'],
           budgetavailable: approvalBudgetAvailable(header),
-          tipe: item['_tipe'] ?? tipe,
+          type: type,
         ));
   }
 
@@ -104,26 +194,38 @@ class _PoExAppState extends State<PoExApp> {
             ),
           );
         }
-        if (_foundUsers.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 40),
-            child: Center(
-              child: Text('No documents found',
-                  style: TextStyle(color: Colors.grey.shade500)),
-            ),
-          );
-        }
         return Column(
-          children: _foundUsers.map<Widget>((item) {
-            final header = _headerOf(item);
-            final date = DateTime.tryParse(header['tanggal']?.toString() ?? '');
-            return ApprovalListCard(
-              title: header['pono']?.toString() ?? '-',
-              subtitle:
-                  "${header['requestorname'] ?? header['requestor'] ?? ''} · ${date == null ? '-' : DateFormat('dd MMM yyyy').format(date)}",
-              onTap: () => _openDetail(item),
-            );
-          }).toList(),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildTypeFilter(),
+            const SizedBox(height: 12),
+            if (_foundUsers.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Center(
+                  child: Text('No documents found',
+                      style: TextStyle(color: Colors.grey.shade500)),
+                ),
+              )
+            else
+              ..._foundUsers.map((item) {
+                final header = _headerOf(item);
+                final type = _itemType(item);
+                final date =
+                    DateTime.tryParse(header['tanggal']?.toString() ?? '');
+                final requestor =
+                    header['requestorname'] ?? header['requestor'] ?? '';
+                final dateLabel = date == null
+                    ? '-'
+                    : DateFormat('dd MMM yyyy').format(date);
+                return ApprovalListCard(
+                  title: header['pono']?.toString() ?? '-',
+                  subtitle:
+                      '${NotifType.poExceptionLabel(type)} · $requestor · $dateLabel',
+                  onTap: () => _openDetail(item),
+                );
+              }),
+          ],
         );
       },
     );
@@ -164,61 +266,45 @@ class _PoExAppState extends State<PoExApp> {
     );
   }
 
-  Future<void> getDataa() async {
-    HttpOverrides.global = MyHttpOverrides();
+  Future<Map<String, String>> _authHeaders() async {
     final SharedPreferences sharedPreferences =
         await SharedPreferences.getInstance();
-    var finalKulonuwun = sharedPreferences.getString('kulonuwun');
-    var finalMonggo = sharedPreferences.getString('monggo');
-    var kulonuwun = MsgHeader.kulonuwun;
-    var monggo = MsgHeader.monggo;
+    final finalKulonuwun = sharedPreferences.getString('kulonuwun');
+    final finalMonggo = sharedPreferences.getString('monggo');
+    return {
+      'Content-Type': 'application/json; charset=utf-8',
+      'kulonuwun': finalKulonuwun ?? MsgHeader.kulonuwun,
+      'monggo': finalMonggo ?? MsgHeader.monggo,
+    };
+  }
+
+  Future<void> getDataa() async {
+    HttpOverrides.global = MyHttpOverrides();
+    final headers = await _authHeaders();
 
     try {
-      var getData = await http.get(
-        // Uri.http('156.67.217.113', '/api/v1/mobile/approval/exeption/poscm/'),
-        Uri.https('v2rp.net', '/api/v1/mobile/approval/exeption/poscm/'),
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'kulonuwun': finalKulonuwun ?? kulonuwun,
-          'monggo': finalMonggo ?? monggo,
-        },
+      final responses = await Future.wait(
+        _listEndpoints.entries.map(
+          (entry) => http.get(
+            Uri.https('v2rp.net', entry.value),
+            headers: headers,
+          ),
+        ),
       );
-      var getData2 = await http.get(
-        // Uri.http('156.67.217.113', '/api/v1/mobile/approval/exeption/poscm/'),
-        Uri.https('v2rp.net', '/api/v1/mobile/approval/exeption/pononscm/'),
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'kulonuwun': finalKulonuwun ?? kulonuwun,
-          'monggo': finalMonggo ?? monggo,
-        },
-      );
-      final responseData = json.decode(getData.body);
-      final responseData2 = json.decode(getData2.body);
 
-      // final data = responseData['data'];
-      setState(() {
-        dataaa = _normalizeItems(responseData['data'], '0');
-        dataaa2 = _normalizeItems(responseData2['data'], '1');
-        gabung = dataaa + dataaa2;
-        _foundUsers = gabung;
-        tipe = '0';
-      });
-
-      if (dataaa.isNotEmpty) {
-        setState(() {
-          tipe = '0';
-        });
-      } else {
-        setState(() {
-          tipe = '1';
-        });
+      final merged = <dynamic>[];
+      var index = 0;
+      for (final entry in _listEndpoints.entries) {
+        final decoded = json.decode(responses[index].body);
+        merged.addAll(_normalizeItems(decoded['data'], entry.key));
+        index++;
       }
 
-      // print("getdataaaa " + responseData.toString());
-      print("dataaaaaaaaaaaaaaa " + dataaa.toString());
-      print("data2 " + dataaa2.toString());
-      print("gabung " + gabung.toString());
-      print("tipe " + tipe.toString());
+      if (!mounted) return;
+      setState(() {
+        _allItems = merged;
+      });
+      _applyFilters();
     } catch (e) {
       print(e);
     }

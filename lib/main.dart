@@ -11,6 +11,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:v2rp3/BE/reqip.dart';
 import 'package:v2rp3/BE/approval_notif_controller.dart';
+import 'package:v2rp3/BE/notif_type.dart';
 import 'package:v2rp3/FE/mainScreen/login_screen4.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart';
 import 'package:v2rp3/FE/navbar/navbar.dart' as navbar_module;
@@ -431,105 +432,106 @@ void _openApprovalDetailByType(String? type, Map<String, dynamic>? data) {
   Future.delayed(const Duration(milliseconds: 800), () {
     try {
       switch (t) {
-        // Cash & Bank
-        case 'KC': // Cash Advance Confirmation
+        // Cash & Bank (kasbon / lpjk)
+        case NotifType.kc: // kasbon confirmation
           Get.to(() => CashAdvanceConfirm());
           break;
-        case 'KA': // Cash Advance Approval
+        case NotifType.ka: // kasbon approval
           Get.to(() => CashAdvanceApproval());
           break;
-        case 'LC': // C/A Settlement Confirmation
+        case NotifType.lc: // lpjk confirmation
           Get.to(() => CaSettleConfirm());
           break;
-        case 'LA': // C/A Settlement Approval
+        case NotifType.la: // lpjk approval
           Get.to(() => CaSetApproval());
           break;
 
         // Sales
-        case 'ARRA': // A/R Receipt Approval
+        case NotifType.arra: // ar receipt approval
           Get.to(() => ArApproval());
           break;
-        case 'SOA': // Sales Order Approval
+        case NotifType.soa: // sales order approval
           Get.to(() => SalesOrderApproval());
           break;
 
         // Purchase
-        case 'SC': // SPPBJ Confirmation
+        case NotifType.sc: // SPPBJ Confirmation
           Get.to(() => SppbjConfirm());
           break;
-        case 'SA': // SPPBJ Approval
+        case NotifType.sa: // SPPBJ Approval
           Get.to(() => SppbjApp());
           break;
-        case 'PA': // PO SCM Approval
+        case NotifType.pa: // PO SCM Approval
           Get.to(() => PoScmApp());
           break;
-        case 'NA': // New Payable Approval
+        case NotifType.na: // newap approval
           Get.to(() => NpApp());
           break;
-        case 'DPA': // D/P Request Approval
+        case NotifType.dpa: // dp approval
           Get.to(() => DpReqApp());
           break;
-        case 'APRA': // A/P Refund Approval
+        case NotifType.apra: // ap refund approval
           Get.to(() => ApRefundApp());
           break;
-        case 'APAA': // A/P Adjustment Approval
+        case NotifType.apaa: // ap adjustment approval
           Get.to(() => ApAdjApp());
           break;
-        case 'DNA': // D/N to Supplier Approval
+        case NotifType.dna: // debit notes approval
           Get.to(() => DebitNotesApp());
           break;
-        case 'POE': // PO Exception Approval
+        case NotifType.poe: // PO SCM Exception Approval
+        case NotifType.pne: // PO NON SCM Exception Approval
           Get.to(() => PoExApp());
           break;
-        case 'POS': // PO SCM Supplier Unapproved Approval (grouped)
-        case 'PNS':
+        case NotifType.pos: // PO SCM Unapprove Approval
+        case NotifType.pns: // PO NON SCM Unapprove Approval
           Get.to(() => PoUnapproved());
           break;
 
         // Inventory
-        case 'MUA': // Material Used Approval
+        case NotifType.mua: // mu approval
           Get.to(() => MuApp());
           break;
-        case 'GRA': // Goods Received Approval
+        case NotifType.gra: // gr approval
           Get.to(() => GrApp());
           break;
-        case 'ITA': // Internal Transfer Approval
+        case NotifType.ita: // it approval
           Get.to(() => ItApp());
           break;
-        case 'SMA': // Stock Movement Approval
+        case NotifType.sma: // stock movement approval
           Get.to(() => SmApp());
           break;
-        case 'SAA': // Stock Adjustment Approval
+        case NotifType.saa: // stock adjustment approval
           Get.to(() => StockAdjApp());
           break;
-        case 'STA': // Stock Transfer Approval
+        case NotifType.sta: // stock transfer approval
           Get.to(() => StockTrfApp());
           break;
-        case 'MRA': // Material Return Approval
+        case NotifType.mra: // mr approval
           Get.to(() => MrApp());
           break;
-        case 'STUA': // Stock Top Up Approval
+        case NotifType.stua: // stock top up approval
           Get.to(() => StockTopupApp());
           break;
-        case 'SPA': // Stock Price Approval
+        case NotifType.spa: // stock price adj approval
           Get.to(() => StockPriceApp());
           break;
-        case 'MMU': // Update Min/Max Parameter
+        case NotifType.mmu: // min max update
           Get.to(() => UpdateMinMaxApp());
           break;
-        case 'ITSA': // IT/Stock Adjustment Approval (grouped)
-        case 'STSA':
+        case NotifType.itsa: // it adjustment approval
+        case NotifType.stsa: // st adjustment approval
           Get.to(() => ItStockAdjApp());
           break;
-        case 'AA': // Assembling Approval
+        case NotifType.aa: // assembling approval
           Get.to(() => AssemblingApp());
           break;
 
         // PPC
-        case 'WOA': // Work Order Approval
+        case NotifType.woa: // wo approval
           Get.to(() => WoApp());
           break;
-        case 'WOU': // Work Order Completed
+        case NotifType.wou: // wo update
           Get.to(() => WoCompleted());
           break;
 
